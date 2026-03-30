@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2196F3">
+    <title>Topo GPX Viewer</title>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.svg">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div id="info-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h4 id="info-title">About Topo GPX Viewer</h4>
+
+            <p id="info-desc">This tool lets you view and explore GPX routes on topographic maps with customizable track styling, distance labels, elevation stats, and more.<br>The application works on mobile devices, but is best experienced on larger
+                screens.</p>
+
+            <button id="start-tutorial-btn" class="action-btn" onclick="startTutorial(); closeInfo();" style="margin: 10px 0;">🎓 Start Tutorial</button>
+
+            <p><strong><a href="https://github.com/droidgren/topo_gpx_viewer">GitHub Project</a></strong></p>
+
+            <p><strong><span id="info-creator">Creator</span>:</strong> <a href="http://droidgren.github.io/"
+                    target="_blank">droidgren.github.io</a></p>
+
+            <p style="font-size: 12px; color: #666; margin-top: 5px; margin-bottom: 0;">
+                <span id="lbl-version">Version</span>: <span id="app-version">0.1</span>
+            </p>
+
+            <details
+                style="text-align: left; background: #f9f9f9; padding: 10px; border-radius: 8px; margin: 10px 0; font-size: 12px; color: #555;">
+                <summary style="font-weight: 700; color: #333; cursor: pointer; outline: none;"
+                    id="info-changelog-title">Changelog</summary>
+                <ul style="padding-left: 20px; margin: 8px 0 0 0; line-height: 1.5;">
+                    <li><strong>v0.1:</strong> Initial release. GPX route viewer with topographic maps, track styling, distance labels, slope coloring, waypoints, and elevation stats.</li>
+                </ul>
+            </details>
+
+            <p id="info-privacy"
+                style="font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 10px; margin-top: 15px;">
+                This application is fully client-side. No data saved on server.
+            </p>
+
+            <button id="install-app-btn" onclick="triggerInstallPrompt()" style="display:none;">📲 Install as App</button>
+
+            <button id="info-close" class="save-btn" onclick="closeInfo()">Close</button>
+        </div>
+    </div>
+
+    <div id="key-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h4 id="modal-title">Enter API Key</h4>
+            <p id="modal-text">...</p>
+            <p><a id="modal-link" href="#" target="_blank">Register here</a></p>
+            <input type="text" id="api-key-input" placeholder="...">
+            <div class="modal-btns">
+                <button id="modal-save" class="save-btn" onclick="saveApiKey()">Save</button>
+                <button id="modal-cancel" class="cancel-btn" onclick="cancelApiKey()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <div class="header-row">
+            <h3 id="app-title">Topo GPX Viewer</h3>
+            <div class="header-buttons">
+                <button class="circle-btn" onclick="toggleLanguage()" title="Switch Language">
+                    <img id="flag-icon" class="flag-img" src="" alt="Flag">
+                </button>
+                <button class="circle-btn info-btn" onclick="showInfo()" title="Info">i</button>
+                <button class="toggle-btn" onclick="toggleControls()" title="Minimize">➖</button>
+            </div>
+        </div>
+
+        <div id="controls-content">
+
+            <!-- Common settings (not collapsible) -->
+            <div style="margin-bottom: 10px;">
+                <div class="control-row layer-row">
+                    <span id="lbl-layers" class="control-label">Map Layer:</span>
+                    <div class="select-container">
+                    <select id="layerSelect" onchange="handleLayerChange(this.value)">
+                        <option value="opentopo" selected>OpenTopo</option>
+                        <option value="tracetrack">Tracetrack Topo</option>
+                        <option value="thunderforest">ThunderForest Outdoors</option>
+                        <option value="lm_map">Lantmäteriet (Sweden)</option>
+                        <option value="osm">OpenStreetMap</option>
+                        <option value="satellite">Satellite (ESRI)</option>
+                    </select>
+                    <button id="edit-key-btn" class="icon-btn" onclick="openCurrentKeyModal()" title="API"
+                        style="display:none;">🔑</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="search-group">
+                <input type="text" id="searchInput" placeholder="Search location">
+                <button class="icon-btn" onclick="locateUser()" title="GPS">📍</button>
+                <button class="icon-btn" onclick="searchLocation()" title="Search">🔍</button>
+            </div>
+
+            <!-- Add Routes (not collapsible — main feature) -->
+            <div id="routes-section" style="border-top: 1px solid #e0e0e0; padding-top: 8px; margin-top: 4px;">
+                <div style="font-size: 14px; font-weight: 700; color: #333; margin-bottom: 6px;">
+                    <span id="section-routes-title">📂 Add Routes</span>
+                </div>
+                <div class="control-row">
+                    <span id="lbl-track-color" class="control-label">Track Color:</span>
+                    <input type="color" id="gpxTrackColor" value="#000000" style="width:36px;height:28px;border:1px solid #ccc;border-radius:4px;cursor:pointer;padding:1px;">
+                </div>
+                <div class="control-row">
+                    <span id="lbl-track-width" class="control-label">Track Width:</span>
+                    <input type="range" id="gpxTrackWidth" min="1" max="10" value="4" step="1" style="flex:1; margin: 0 6px;">
+                    <span id="gpxTrackWidthVal" style="min-width:25px;text-align:right;font-size:13px;">4</span>
+                </div>
+                <div class="checkbox-group">
+                    <div class="checkbox-row">
+                            <input type="checkbox" id="gpxShowKmLabels" checked>
+                        <label id="lbl-km-labels" for="gpxShowKmLabels">Show Distance labels</label>
+                    </div>
+                    <select id="distanceUnit" style="width:auto; max-width:min-content; padding:2px 4px; border:1px solid #ccc; border-radius:6px; font-size:12px;">
+                        <option value="km" id="opt-unit-km">Kilometers</option>
+                        <option value="mi" id="opt-unit-mi">Miles</option>
+                    </select>
+                </div>
+                <div class="checkbox-group">
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="gpxShowWaypoints" checked>
+                        <label id="lbl-show-waypoints" for="gpxShowWaypoints">Show Waypoints</label>
+                    </div>
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="gpxShowMinMax" checked>
+                        <label id="lbl-show-minmax" for="gpxShowMinMax">Show Max/Min Height</label>
+                    </div>
+                </div>
+                <div class="checkbox-group">
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="gpxColorBySlope">
+                        <label id="lbl-color-slope" for="gpxColorBySlope">Color by slope</label>
+                    </div>
+                </div>
+                <input type="file" id="gpx-file-input" accept=".gpx" style="display:none;">
+                <button id="gpx-btn" class="gpx-btn" onclick="document.getElementById('gpx-file-input').click()">📂 Load GPX Route</button>
+                <div id="gpx-track-info" class="gpx-track-info" style="display:none;"></div>
+                <button id="gpx-clear-btn" class="gpx-clear-btn" onclick="clearGpxRoute()" style="display:none;">✕ Clear Route</button>
+            </div>
+        </div>
+
+        <div class="footer-row">
+            <div id="status">Ready.</div>
+            <span id="zoom-level" class="zoom-badge">Zoom: 11</span>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div id="update-notification" class="notification-snackbar">
+        <span id="update-msg">A new version is available.</span>
+        <button id="update-btn">Update</button>
+    </div>
+
+    <div id="mobile-install-bar" class="notification-snackbar">
+        <span id="mobile-install-msg">Install Topo GPX Viewer as an app!</span>
+        <button id="mobile-install-btn" onclick="triggerInstallPrompt()">Install</button>
+        <button id="mobile-install-dismiss" onclick="dismissInstallBar()">✕</button>
+    </div>
+
+    <!-- TUTORIAL OVERLAY -->
+    <div id="tutorial-overlay" style="display:none;">
+        <div id="tutorial-spotlight"></div>
+        <div id="tutorial-tooltip">
+            <h4 id="tutorial-title"></h4>
+            <p id="tutorial-text"></p>
+            <div class="tutorial-nav">
+                <button id="tutorial-prev" class="tutorial-nav-btn" onclick="tutorialPrev()">Back</button>
+                <span id="tutorial-progress"></span>
+                <button id="tutorial-next" class="tutorial-nav-btn" onclick="tutorialNext()">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+    <script src="lang/en.js"></script>
+    <script src="lang/sv.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,660 @@
+body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+}
+
+#map {
+    height: 100vh;
+    width: 100%;
+}
+
+/* --- CONTROL PANEL --- */
+#controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 2000;
+    width: 300px;
+    background: rgba(255, 255, 255, 0.5);
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    backdrop-filter: blur(5px);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+@media (max-width: 600px) {
+    #controls {
+        width: auto;
+        left: 10px;
+        right: 10px;
+        top: 10px;
+    }
+}
+
+#controls.minimized #controls-content {
+    display: none;
+}
+
+#controls.minimized {
+    overflow: hidden;
+}
+
+.header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0;
+}
+
+.header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #333;
+    white-space: nowrap;
+}
+
+.toggle-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #555;
+    padding: 0 5px;
+    line-height: 1;
+}
+
+/* BUTTONS IN HEADER (INFO & LANGUAGE) */
+.circle-btn {
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid #999;
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.2s;
+    overflow: hidden;
+}
+
+.circle-btn:hover {
+    background: #fff;
+    border-color: #555;
+}
+
+.info-btn {
+    font-size: 14px;
+    font-family: serif;
+    font-weight: bold;
+    font-style: italic;
+    color: #555;
+}
+
+/* FLAG IMAGE */
+.flag-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.footer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+}
+
+/* MODAL (COMMON DESIGN) */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    z-index: 3000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(3px);
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: #fff;
+    padding: 25px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+.modal-content h4 {
+    margin-top: 0;
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+.modal-content p {
+    font-size: 14px;
+    color: #555;
+    line-height: 1.5;
+    margin-bottom: 15px;
+}
+
+.modal-content a {
+    color: #007bff;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.modal-content input {
+    width: 90%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-family: monospace;
+}
+
+.modal-btns {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 15px;
+}
+
+.save-btn {
+    background-color: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.cancel-btn {
+    background-color: #6c757d;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.save-btn:hover {
+    background-color: #218838;
+}
+
+/* OTHER DESIGN */
+button {
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+
+.action-btn {
+    background-color: #d9534f;
+    color: white;
+    padding: 12px;
+    font-size: 14px;
+    width: 100%;
+    margin-top: 5px;
+    transition: all 0.3s ease;
+}
+
+.action-btn:hover {
+    background-color: #c9302c;
+}
+
+.action-btn:disabled {
+    background-color: #cccccc;
+    color: #666666;
+    cursor: not-allowed;
+}
+
+/* --- GPX ROUTES --- */
+.gpx-btn {
+    background-color: #00897B;
+    color: white;
+    padding: 12px;
+    font-size: 14px;
+    width: 100%;
+    margin-top: 5px;
+    transition: all 0.3s ease;
+}
+
+.gpx-btn:hover {
+    background-color: #00695C;
+}
+
+.gpx-clear-btn {
+    display: none;
+    background-color: #78909C;
+    color: white;
+    padding: 8px;
+    font-size: 13px;
+    width: 100%;
+    margin-top: 5px;
+    transition: all 0.3s ease;
+}
+
+.gpx-clear-btn:hover {
+    background-color: #546E7A;
+}
+
+.gpx-track-info {
+    background: #f5f5f5;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #444;
+}
+
+.gpx-track-info span {
+    font-weight: 600;
+}
+
+.gpx-km-label {
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid #666;
+    border-radius: 3px;
+    padding: 2px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #333;
+    white-space: nowrap;
+    line-height: normal;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.gpx-elev-label {
+    background: rgba(255, 255, 255, 0.92);
+    border: 2px solid #D32F2F;
+    border-radius: 5px;
+    padding: 3px 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #B71C1C;
+    white-space: nowrap;
+    line-height: normal;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+.gpx-elev-label.min-elev {
+    border-color: #1565C0;
+    color: #0D47A1;
+}
+
+.gpx-waypoint-label {
+    background: rgba(255, 255, 255, 0.92);
+    border: 2px solid #2E7D32;
+    border-radius: 5px;
+    padding: 3px 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #1B5E20;
+    white-space: nowrap;
+    line-height: normal;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+.gpx-start-end-label {
+    background: rgba(40, 40, 40, 0.88);
+    border: 2px solid #fff;
+    border-radius: 5px;
+    padding: 3px 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #fff;
+    white-space: nowrap;
+    line-height: normal;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+.icon-btn {
+    background: #f8f9fa;
+    border: 1px solid #ced4da;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    margin: 0;
+}
+
+.icon-btn:hover {
+    background: #e2e6ea;
+}
+
+.search-group {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 5px;
+    align-items: center;
+}
+
+#searchInput {
+    flex-grow: 1;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: normal;
+    outline: none;
+    box-sizing: border-box;
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.control-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.control-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #444;
+}
+
+.select-container {
+    display: flex;
+    gap: 5px;
+    width: 100%;
+}
+
+.layer-row {
+    margin-bottom: 0;
+    gap: 8px;
+}
+
+.layer-row .select-container {
+    width: auto;
+    flex: 0 0 200px;
+}
+
+.layer-row #layerSelect {
+    min-width: 0;
+}
+
+select {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 13px;
+    background-color: #fff;
+    margin-top: 2px;
+}
+
+#edit-key-btn {
+    display: none;
+    padding: 0 8px;
+    font-size: 14px;
+    margin-top: 2px;
+}
+
+.checkbox-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 5px;
+}
+
+.checkbox-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.checkbox-row label {
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.zoom-badge {
+    color: #495057;
+    padding: 0;
+    font-size: 11px;
+    font-weight: bold;
+    font-family: monospace;
+}
+
+#status {
+    font-size: 13px;
+    font-weight: 500;
+    color: #444;
+}
+
+/* CHANGELOG ACCORDION */
+details summary:hover {
+    color: #007bff !important;
+}
+
+details[open] summary {
+    margin-bottom: 5px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+}
+
+/* --- UPDATE NOTIFICATION --- */
+.notification-snackbar {
+    position: fixed;
+    bottom: 25px;
+    left: 50%;
+    transform: translateX(-50%) translateY(150%);
+    background: rgba(33, 33, 33, 0.95);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    z-index: 9999;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(10px);
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    width: max-content;
+    max-width: 90vw;
+}
+
+.notification-snackbar.show {
+    transform: translateX(-50%) translateY(0);
+}
+
+.notification-snackbar span {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.notification-snackbar button {
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.notification-snackbar button:hover {
+    background-color: #1976D2;
+}
+
+/* --- INSTALL BUTTON --- */
+#install-app-btn {
+    display: none;
+    width: 100%;
+    background-color: #2196F3;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    margin: 10px 0;
+}
+
+#install-app-btn:hover {
+    background-color: #1976D2;
+}
+
+/* --- MOBILE INSTALL BAR dismiss button --- */
+#mobile-install-dismiss {
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+    padding: 2px 6px !important;
+    font-size: 15px !important;
+    border-radius: 50% !important;
+    line-height: 1;
+}
+
+#mobile-install-dismiss:hover {
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: white !important;
+}
+
+/* --- TUTORIAL SPOTLIGHT --- */
+#tutorial-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 5000;
+    pointer-events: none;
+}
+
+#tutorial-spotlight {
+    position: absolute;
+    border-radius: 10px;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+    transition: all 0.4s ease;
+    pointer-events: none;
+}
+
+#tutorial-tooltip {
+    position: absolute;
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 320px;
+    width: 90vw;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    pointer-events: auto;
+    z-index: 5001;
+    transition: all 0.4s ease;
+}
+
+#tutorial-tooltip h4 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    color: #333;
+}
+
+#tutorial-tooltip p {
+    margin: 0 0 15px 0;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.6;
+    white-space: pre-line;
+}
+
+.tutorial-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.tutorial-nav-btn {
+    background: #2196F3;
+    color: white;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.tutorial-nav-btn:hover {
+    background: #1976D2;
+}
+
+#tutorial-progress {
+    font-size: 12px;
+    color: #999;
+    font-weight: 600;
+}
+
+#tutorial-prev {
+    background: #e0e0e0;
+    color: #333;
+}
+
+#tutorial-prev:hover {
+    background: #bdbdbd;
+}
+
+/* --- RESET NORTH COMPASS CONTROL --- */
+.reset-north-control {
+    display: none;
+}
+
+.reset-north-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background: white !important;
+    cursor: pointer;
+}
+
+.reset-north-btn:hover {
+    background: #f4f4f4 !important;
+}
+
+.compass-icon {
+    transition: transform 0.15s ease;
+}
