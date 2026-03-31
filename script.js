@@ -270,7 +270,7 @@ function handleLayerChange(layerKey) {
     }
     previousLayerValue = layerKey;
     localStorage.setItem('gpxv_layer', layerKey);
-    if (editKeyBtn) editKeyBtn.style.display = lockedServices[layerKey] ? '' : 'none';
+    if (editKeyBtn) editKeyBtn.style.display = lockedServices[layerKey] ? 'block' : 'none';
 }
 
 function switchLayerTo(layerKey) {
@@ -323,7 +323,7 @@ function saveApiKey() {
             loadLockedLayer(pendingServiceKey, key);
             if (layerSelect) layerSelect.value = pendingServiceKey;
             localStorage.setItem('gpxv_layer', pendingServiceKey);
-            if (editKeyBtn) editKeyBtn.style.display = '';
+            if (editKeyBtn) editKeyBtn.style.display = 'block';
             previousLayerValue = pendingServiceKey;
         }
     }
