@@ -1315,7 +1315,8 @@ function drawElevationCursor(canvasX, point) {
     const p = canvas._epParams;
     const dpr = window.devicePixelRatio || 1;
     const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const x = canvasX;
     const yScale = (e) => p.PAD_TOP + p.plotH - ((e - p.eleMin) / (p.eleMax - p.eleMin)) * p.plotH;
@@ -1339,6 +1340,7 @@ function drawElevationCursor(canvasX, point) {
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.stroke();
+    ctx.restore();
 }
 
 function showElevationMarker(lat, lon) {
