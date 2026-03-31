@@ -44,7 +44,7 @@ const LANG_EN = {
     tutorial_layers_title: "Map Layers",
     tutorial_layers_text: "Switch between different map styles: topographic, satellite, and more. Some layers require a free API key.",
     tutorial_routes_title: "Add Routes (GPX)",
-    tutorial_routes_text: "Load a GPX file to overlay a route on the map. Customize track color, width, and toggle distance labels, slope coloring, waypoints, and min/max elevation markers.",
+    tutorial_routes_text: "Load a GPX file to overlay a route on the map. Customize track color, width, and toggle distance labels, slope coloring, waypoints, min/max elevation markers, and an interactive elevation profile.",
     tutorial_search_title: "Search & Location",
     tutorial_search_text: "Search for any place by name or coordinates. Use the GPS button to jump to your current location.",
     tutorial_tips_title: "💡 Tips",
@@ -74,4 +74,6 @@ const LANG_EN = {
     gpx_info_max_elev: "Max Elevation",
     gpx_start: "Start",
     gpx_end: "End",
+    elevation_profile: "Elevation Profile",
+    lbl_show_elev_profile: "Show Elevation Profile",
 };

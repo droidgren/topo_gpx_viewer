@@ -12,6 +12,7 @@ A lightweight, browser-based tool for viewing and exploring GPX routes on topogr
 - **Distance labels** — Toggle kilometer/mile markers along the track
 - **Slope coloring** — Visualize uphills and downhills with gradient coloring
 - **Elevation stats** — Track length, elevation gain/loss, min/max elevation
+- **Elevation profile** — Interactive bottom bar showing the track elevation profile with cursor tracking
 - **Min/Max markers** — Show highest and lowest points on the track
 - **Waypoint display** — Toggle GPX waypoints with labels
 - **Map rotation** — Ctrl+drag on desktop, two-finger rotate on touch devices
@@ -44,6 +45,12 @@ A lightweight, browser-based tool for viewing and exploring GPX routes on topogr
 - Click the GPS button to center on your current location
 
 ## Changelog
+
+### v0.2
+- Elevation profile bar with interactive cursor tracking and map marker
+- Drag or hover along the profile to follow the route on the map
+- Toggle elevation profile on/off from the control panel
+- Minimize/expand the profile bar
 
 ### v0.1
 - Initial release
