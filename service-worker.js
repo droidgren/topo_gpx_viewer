@@ -1,4 +1,4 @@
-const CACHE_NAME = 'topo-gpx-viewer-v0.2';
+const CACHE_NAME = 'topo-gpx-viewer-v0.2.1';
 const ASSETS = [
     './',
     './index.html',
