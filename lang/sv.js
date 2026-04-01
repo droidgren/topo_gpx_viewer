@@ -44,7 +44,7 @@ const LANG_SV = {
     tutorial_layers_title: "Kartlager",
     tutorial_layers_text: "Byt mellan olika kartstilar: topografisk, satellit med mera. Vissa lager kräver en gratis API-nyckel.",
     tutorial_routes_title: "Lägg till spår (GPX)",
-    tutorial_routes_text: "Ladda en GPX-fil för att visa ett spår på kartan. Anpassa spårfärg, bredd och växla avståndsmarkeringar, lutningsfärgning, vägpunkter, min/max höjdmarkörer och en interaktiv höjdprofil.",
+    tutorial_routes_text: "Ladda en GPX-fil för att visa ett spår på kartan. Anpassa spårfärg, bredd och växla avståndsmarkeringar, lutningsfärgning, vägpunkter, min/max höjdmarkörer och en interaktiv höjdprofil. Aktivera kartsynk för att centrera kartan på din position när du drar längs profilen.",
     tutorial_search_title: "Sök & Position",
     tutorial_search_text: "Sök efter valfri plats med namn eller koordinater. Använd GPS-knappen för att hoppa till din position.",
     tutorial_tips_title: "💡 Tips",
@@ -76,4 +76,5 @@ const LANG_SV = {
     gpx_end: "Mål",
     elevation_profile: "Höjdprofil",
     lbl_show_elev_profile: "Visa höjdprofil",
+    lbl_elev_map_sync: "Synka karta med profil",
 };

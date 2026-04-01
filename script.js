@@ -246,6 +246,8 @@ function updateLanguage() {
         if (epTitle) epTitle.textContent = t.elevation_profile;
         const lblElevProfile = document.getElementById('lbl-show-elev-profile');
         if (lblElevProfile) lblElevProfile.textContent = t.lbl_show_elev_profile;
+        const lblElevMapSync = document.getElementById('lbl-elev-map-sync');
+        if (lblElevMapSync) lblElevMapSync.textContent = t.lbl_elev_map_sync;
     }
 }
 
@@ -631,6 +633,11 @@ function getGpxShowWaypoints() {
 
 function getGpxShowElevProfile() {
     const el = document.getElementById('gpxShowElevProfile');
+    return el ? el.checked : true;
+}
+
+function getElevMapSync() {
+    const el = document.getElementById('gpxElevMapSync');
     return el ? el.checked : true;
 }
 
@@ -1370,7 +1377,7 @@ function removeElevationMarker() {
     if (!canvas) return;
     let dragging = false;
 
-    function handlePointer(e) {
+    function handlePointer(e, syncMap) {
         const rect = canvas.getBoundingClientRect();
         let clientX;
         if (e.touches && e.touches.length > 0) {
@@ -1384,11 +1391,14 @@ function removeElevationMarker() {
             drawElevationCursor(canvasX, point);
             updateElevationProfileInfo(point);
             showElevationMarker(point.lat, point.lon);
+            if (syncMap && getElevMapSync()) {
+                map.panTo([point.lat, point.lon], { animate: false });
+            }
         }
     }
 
-    canvas.addEventListener('mousedown', (e) => { dragging = true; handlePointer(e); });
-    canvas.addEventListener('mousemove', (e) => { if (dragging) handlePointer(e); });
+    canvas.addEventListener('mousedown', (e) => { dragging = true; handlePointer(e, true); });
+    canvas.addEventListener('mousemove', (e) => { if (dragging) handlePointer(e, true); });
     window.addEventListener('mouseup', () => {
         if (dragging) {
             dragging = false;
@@ -1406,8 +1416,8 @@ function removeElevationMarker() {
     });
 
     // Touch support
-    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); dragging = true; handlePointer(e); }, { passive: false });
-    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (dragging) handlePointer(e); }, { passive: false });
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); dragging = true; handlePointer(e, true); }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (dragging) handlePointer(e, true); }, { passive: false });
     canvas.addEventListener('touchend', () => {
         dragging = false;
         removeElevationMarker();
@@ -1428,6 +1438,16 @@ function removeElevationMarker() {
             }
         }
     });
+
+    // Tap overlay header to toggle on mobile
+    const overlay = document.querySelector('.elevation-profile-overlay');
+    if (overlay) {
+        overlay.addEventListener('click', (e) => {
+            if (window.innerWidth <= 600 && e.target === overlay) {
+                toggleElevationProfile();
+            }
+        });
+    }
 
     // Redraw on resize
     window.addEventListener('resize', () => {

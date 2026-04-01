@@ -153,6 +153,12 @@
                         <label id="lbl-show-elev-profile" for="gpxShowElevProfile">Show Elevation Profile</label>
                     </div>
                 </div>
+                <div class="checkbox-group">
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="gpxElevMapSync" checked>
+                        <label id="lbl-elev-map-sync" for="gpxElevMapSync">Sync Map with Profile</label>
+                    </div>
+                </div>
                 <input type="file" id="gpx-file-input" accept=".gpx" style="display:none;">
                 <button id="gpx-btn" class="gpx-btn" onclick="document.getElementById('gpx-file-input').click()">📂 Load GPX Route</button>
                 <div id="gpx-track-info" class="gpx-track-info" style="display:none;"></div>

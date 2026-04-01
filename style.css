@@ -691,16 +691,27 @@ details[open] summary {
 
 .elevation-profile-overlay {
     position: absolute;
-    top: 2px;
+    top: 0;
     left: 52px;
     right: 6px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 2px 4px;
+    min-height: 24px;
     pointer-events: none;
     user-select: none;
     z-index: 1;
+}
+
+@media (max-width: 600px) {
+    .elevation-profile-overlay {
+        pointer-events: auto;
+        cursor: pointer;
+        left: 0;
+        right: 0;
+        padding: 4px 10px;
+    }
 }
 
 .elevation-profile-overlay > * {
