@@ -49,6 +49,7 @@ A lightweight, browser-based tool for viewing and exploring GPX routes on topogr
 ### v0.2
 - Elevation profile bar with interactive cursor tracking and map marker
 - Drag or hover along the profile to follow the route on the map
+- Arrow key stepping: ← → to walk the dot along the track, Shift for bigger steps, Escape to clear
 - Map sync: optionally center the map on the current profile position
 - Toggle elevation profile on/off from the control panel
 - Minimize/expand the profile bar

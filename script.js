@@ -1376,6 +1376,29 @@ function removeElevationMarker() {
     const canvas = document.getElementById('elevation-canvas');
     if (!canvas) return;
     let dragging = false;
+    let cursorFrac = null; // 0..1 fraction along track for keyboard nav
+
+    function distToCanvasX(frac) {
+        const p = canvas._epParams;
+        if (!p) return 0;
+        return p.PAD_LEFT + frac * p.plotW;
+    }
+
+    function showAtFrac(frac, syncMap) {
+        if (!elevationProfileData || !canvas._epParams) return;
+        frac = Math.max(0, Math.min(1, frac));
+        cursorFrac = frac;
+        const canvasX = distToCanvasX(frac);
+        const point = getElevationPointAtX(canvasX);
+        if (point) {
+            drawElevationCursor(canvasX, point);
+            updateElevationProfileInfo(point);
+            showElevationMarker(point.lat, point.lon);
+            if (syncMap && getElevMapSync()) {
+                map.panTo([point.lat, point.lon], { animate: false });
+            }
+        }
+    }
 
     function handlePointer(e, syncMap) {
         const rect = canvas.getBoundingClientRect();
@@ -1386,6 +1409,8 @@ function removeElevationMarker() {
             clientX = e.clientX;
         }
         const canvasX = clientX - rect.left;
+        const p = canvas._epParams;
+        if (p) cursorFrac = Math.max(0, Math.min(1, (canvasX - p.PAD_LEFT) / p.plotW));
         const point = getElevationPointAtX(canvasX);
         if (point) {
             drawElevationCursor(canvasX, point);
@@ -1448,6 +1473,30 @@ function removeElevationMarker() {
             }
         });
     }
+
+    // Keyboard arrow key navigation
+    document.addEventListener('keydown', (e) => {
+        if (!elevationProfileData || elevationProfileMinimized) return;
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        const container = document.getElementById('elevation-profile');
+        if (!container || container.style.display === 'none') return;
+
+        e.preventDefault();
+        const step = e.shiftKey ? 0.01 : 0.002; // Shift for bigger steps
+        if (cursorFrac === null) cursorFrac = 0;
+        if (e.key === 'ArrowRight') cursorFrac = Math.min(1, cursorFrac + step);
+        else cursorFrac = Math.max(0, cursorFrac - step);
+        showAtFrac(cursorFrac, true);
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if (e.key === 'Escape' && cursorFrac !== null) {
+            cursorFrac = null;
+            removeElevationMarker();
+            drawElevationProfile();
+            updateElevationProfileInfo(null);
+        }
+    });
 
     // Redraw on resize
     window.addEventListener('resize', () => {

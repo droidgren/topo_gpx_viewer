@@ -48,7 +48,7 @@ const LANG_EN = {
     tutorial_search_title: "Search & Location",
     tutorial_search_text: "Search for any place by name or coordinates. Use the GPS button to jump to your current location.",
     tutorial_tips_title: "💡 Tips",
-    tutorial_tips_text: "• Load a GPX file to see your route with distance labels and elevation stats.\n• Use slope coloring to visualize uphills and downhills.\n• Rotate the map by holding Ctrl and dragging, or use two-finger rotation on touch devices. Tap the compass icon to reset north.",
+    tutorial_tips_text: "• Load a GPX file to see your route with distance labels and elevation stats.\n• Use slope coloring to visualize uphills and downhills.\n• Rotate the map by holding Ctrl and dragging, or use two-finger rotation on touch devices. Tap the compass icon to reset north.\n• In the elevation profile, use ← → arrow keys to step along the track (hold Shift for bigger steps). Press Escape to clear.",
     tutorial_btn_next: "Next",
     tutorial_btn_prev: "Back",
     tutorial_btn_finish: "Finish",

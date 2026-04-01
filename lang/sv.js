@@ -48,7 +48,7 @@ const LANG_SV = {
     tutorial_search_title: "Sök & Position",
     tutorial_search_text: "Sök efter valfri plats med namn eller koordinater. Använd GPS-knappen för att hoppa till din position.",
     tutorial_tips_title: "💡 Tips",
-    tutorial_tips_text: "• Ladda en GPX-fil för att se ditt spår med avståndsmarkeringar och höjdstatistik.\n• Använd lutningsfärgning för att visualisera uppförs- och nedförsbackar.\n• Rotera kartan genom att hålla Ctrl och dra, eller använd tvåfingerrotation på pekskärm. Tryck på kompassikonen för att återställa norr.",
+    tutorial_tips_text: "• Ladda en GPX-fil för att se ditt spår med avståndsmarkeringar och höjdstatistik.\n• Använd lutningsfärgning för att visualisera uppförs- och nedförsbackar.\n• Rotera kartan genom att hålla Ctrl och dra, eller använd tvåfingerrotation på pekskärm. Tryck på kompassikonen för att återställa norr.\n• I höjdprofilen kan du använda ← → piltangenterna för att gå längs spåret (håll Shift för större steg). Tryck Escape för att avsluta.",
     tutorial_btn_next: "Nästa",
     tutorial_btn_prev: "Tillbaka",
     tutorial_btn_finish: "Avsluta",
