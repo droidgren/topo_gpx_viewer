@@ -1,7 +1,7 @@
 // ==========================================
 // 1. CONFIGURATION & CONSTANTS
 // ==========================================
-const APP_VERSION = "0.2";
+const APP_VERSION = "0.21";
 
 // Base64 flags
 const FLAG_SE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxMCI+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjEwIiBmaWxsPSIjMDA2YWE3Ii8+PHJlY3QgeD0iNSIgd2lkdGg9IjIiIGhlaWdodD0iMTAiIGZpbGw9IiNmZWNjMDAiLz48cmVjdCB5PSI0IiB3aWR0aD0iMTYiIGhlaWdodD0iMiIgZmlsbD0iI2ZlY2MwMCIvPjwvc3ZnPg==";
@@ -72,6 +72,8 @@ let currentLayer = null;
 let previousLayerValue = "opentopo";
 let pendingServiceKey = null;
 let deferredInstallPrompt = null;
+let gpsMarker = null;
+let gpsWatchId = null;
 
 // Load saved position
 const savedLat = parseFloat(localStorage.getItem('gpxv_lat')) || 67.89;
@@ -248,6 +250,8 @@ function updateLanguage() {
         if (lblElevProfile) lblElevProfile.textContent = t.lbl_show_elev_profile;
         const lblElevMapSync = document.getElementById('lbl-elev-map-sync');
         if (lblElevMapSync) lblElevMapSync.textContent = t.lbl_elev_map_sync;
+        const lblCrosshair = document.getElementById('lbl-show-crosshair');
+        if (lblCrosshair) lblCrosshair.textContent = t.lbl_show_crosshair;
     }
 }
 
@@ -380,9 +384,43 @@ function locateUser() {
     const t = translations[currentLang];
     if (!navigator.geolocation) { statusDiv.textContent = t.status_gps_missing; return; }
     statusDiv.textContent = t.status_gps_fetch;
+
+    function updateGpsMarker(pos) {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        if (gpsMarker) {
+            gpsMarker.setLatLng([lat, lng]);
+        } else {
+            gpsMarker = L.circleMarker([lat, lng], {
+                radius: 4,
+                color: '#e67e22',
+                fillColor: '#ffffff',
+                fillOpacity: 1,
+                weight: 2,
+                interactive: false
+            }).addTo(map);
+        }
+    }
+
+    // Initial position — center the map
     navigator.geolocation.getCurrentPosition(
-        (pos) => { map.setView([pos.coords.latitude, pos.coords.longitude], 13); statusDiv.textContent = t.status_done; },
-        () => statusDiv.textContent = t.status_gps_error
+        (pos) => {
+            map.setView([pos.coords.latitude, pos.coords.longitude], 13);
+            updateGpsMarker(pos);
+            statusDiv.textContent = t.status_done;
+        },
+        () => statusDiv.textContent = t.status_gps_error,
+        { enableHighAccuracy: true }
+    );
+
+    // Continuous updates — only move the marker, don't pan
+    if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+    }
+    gpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => updateGpsMarker(pos),
+        () => {},
+        { enableHighAccuracy: true }
     );
 }
 
@@ -1543,6 +1581,22 @@ if (savedUnit) {
 }
 handleLayerChange(savedLayer);
 updateUI();
+
+// Crosshair toggle
+(function () {
+    const crosshairEl = document.getElementById('crosshair');
+    const checkbox = document.getElementById('showCrosshair');
+    if (!crosshairEl || !checkbox) return;
+    const saved = localStorage.getItem('gpxv_crosshair');
+    if (saved === 'false') {
+        checkbox.checked = false;
+        crosshairEl.classList.add('hidden');
+    }
+    checkbox.addEventListener('change', function () {
+        crosshairEl.classList.toggle('hidden', !this.checked);
+        localStorage.setItem('gpxv_crosshair', this.checked);
+    });
+})();
 
 // Auto-start tutorial for new visitors
 if (!localStorage.getItem('gpxv_tutorial_done')) {

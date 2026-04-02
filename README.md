@@ -17,7 +17,8 @@ A lightweight, browser-based tool for viewing and exploring GPX routes on topogr
 - **Waypoint display** — Toggle GPX waypoints with labels
 - **Map rotation** — Ctrl+drag on desktop, two-finger rotate on touch devices
 - **Location search** — Search by place name or coordinates
-- **Geolocation** — Jump to your current GPS position
+- **Geolocation** — Jump to your current GPS position with a live position marker
+- **Center crosshair** — Toggle a map-center crosshair on/off from settings
 - **PWA** — Install as an app on mobile or desktop
 - **Bilingual** — English and Swedish
 
@@ -45,6 +46,11 @@ A lightweight, browser-based tool for viewing and exploring GPX routes on topogr
 - Click the GPS button to center on your current location
 
 ## Changelog
+
+### v0.21
+- Added a toggleable center crosshair setting
+- Added a live GPS position marker that updates continuously while geolocation is active
+- Updated the center/GPS marker styling to match the elevation_finder lock-radius marker design
 
 ### v0.2
 - Elevation profile bar with interactive cursor tracking and map marker

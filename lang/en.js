@@ -77,4 +77,5 @@ const LANG_EN = {
     elevation_profile: "Elevation Profile",
     lbl_show_elev_profile: "Show Elevation Profile",
     lbl_elev_map_sync: "Sync Map with Profile",
+    lbl_show_crosshair: "Show Crosshair",
 };

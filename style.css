@@ -10,6 +10,43 @@ body {
     width: 100%;
 }
 
+/* --- CROSSHAIR --- */
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    transform: translate(-50%, -50%);
+    z-index: 900;
+    pointer-events: none;
+}
+
+#crosshair::before,
+#crosshair::after {
+    content: '';
+    position: absolute;
+    background: #333;
+}
+
+#crosshair::before {
+    top: 9px;
+    left: 0;
+    width: 20px;
+    height: 2px;
+}
+
+#crosshair::after {
+    top: 0;
+    left: 9px;
+    width: 2px;
+    height: 20px;
+}
+
+#crosshair.hidden {
+    display: none;
+}
+
 /* --- CONTROL PANEL --- */
 #controls {
     position: absolute;

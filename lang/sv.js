@@ -77,4 +77,5 @@ const LANG_SV = {
     elevation_profile: "Höjdprofil",
     lbl_show_elev_profile: "Visa höjdprofil",
     lbl_elev_map_sync: "Synka karta med profil",
+    lbl_show_crosshair: "Visa h\u00e5rkors",
 };
