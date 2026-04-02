@@ -74,6 +74,7 @@ let pendingServiceKey = null;
 let deferredInstallPrompt = null;
 let gpsMarker = null;
 let gpsWatchId = null;
+let isElevationCursorActive = false;
 
 // Load saved position
 const savedLat = parseFloat(localStorage.getItem('gpxv_lat')) || 67.89;
@@ -255,6 +256,13 @@ function updateLanguage() {
     }
 }
 
+function syncCrosshairVisibility() {
+    const crosshairEl = document.getElementById('crosshair');
+    const checkbox = document.getElementById('showCrosshair');
+    if (!crosshairEl || !checkbox) return;
+    crosshairEl.classList.toggle('hidden', !checkbox.checked || isElevationCursorActive);
+}
+
 function toggleLanguage() {
     currentLang = currentLang === 'en' ? 'sv' : 'en';
     localStorage.setItem('gpxv_lang', currentLang);
@@ -392,9 +400,9 @@ function locateUser() {
             gpsMarker.setLatLng([lat, lng]);
         } else {
             gpsMarker = L.circleMarker([lat, lng], {
-                radius: 4,
-                color: '#e67e22',
-                fillColor: '#ffffff',
+                radius: 5,
+                color: '#ffffff',
+                fillColor: '#007bff',
                 fillOpacity: 1,
                 weight: 2,
                 interactive: false
@@ -1407,6 +1415,8 @@ function removeElevationMarker() {
         map.removeLayer(elevationProfileMarker);
         elevationProfileMarker = null;
     }
+    isElevationCursorActive = false;
+    syncCrosshairVisibility();
 }
 
 // Elevation canvas interaction handlers
@@ -1426,6 +1436,8 @@ function removeElevationMarker() {
         if (!elevationProfileData || !canvas._epParams) return;
         frac = Math.max(0, Math.min(1, frac));
         cursorFrac = frac;
+        isElevationCursorActive = true;
+        syncCrosshairVisibility();
         const canvasX = distToCanvasX(frac);
         const point = getElevationPointAtX(canvasX);
         if (point) {
@@ -1448,6 +1460,8 @@ function removeElevationMarker() {
         }
         const canvasX = clientX - rect.left;
         const p = canvas._epParams;
+        isElevationCursorActive = true;
+        syncCrosshairVisibility();
         if (p) cursorFrac = Math.max(0, Math.min(1, (canvasX - p.PAD_LEFT) / p.plotW));
         const point = getElevationPointAtX(canvasX);
         if (point) {
@@ -1590,12 +1604,12 @@ updateUI();
     const saved = localStorage.getItem('gpxv_crosshair');
     if (saved === 'false') {
         checkbox.checked = false;
-        crosshairEl.classList.add('hidden');
     }
     checkbox.addEventListener('change', function () {
-        crosshairEl.classList.toggle('hidden', !this.checked);
         localStorage.setItem('gpxv_crosshair', this.checked);
+        syncCrosshairVisibility();
     });
+    syncCrosshairVisibility();
 })();
 
 // Auto-start tutorial for new visitors
