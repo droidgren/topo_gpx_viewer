@@ -1,7 +1,7 @@
 // ==========================================
 // 1. CONFIGURATION & CONSTANTS
 // ==========================================
-const APP_VERSION = "0.21";
+const APP_VERSION = "0.22";
 
 // Base64 flags
 const FLAG_SE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxMCI+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjEwIiBmaWxsPSIjMDA2YWE3Ii8+PHJlY3QgeD0iNSIgd2lkdGg9IjIiIGhlaWdodD0iMTAiIGZpbGw9IiNmZWNjMDAiLz48cmVjdCB5PSI0IiB3aWR0aD0iMTYiIGhlaWdodD0iMiIgZmlsbD0iI2ZlY2MwMCIvPjwvc3ZnPg==";
@@ -253,6 +253,44 @@ function updateLanguage() {
         if (lblElevMapSync) lblElevMapSync.textContent = t.lbl_elev_map_sync;
         const lblCrosshair = document.getElementById('lbl-show-crosshair');
         if (lblCrosshair) lblCrosshair.textContent = t.lbl_show_crosshair;
+
+        // Edit mode strings
+        const sectionEditTitle = document.getElementById('section-edit-title');
+        if (sectionEditTitle) sectionEditTitle.textContent = t.section_edit_title;
+        const newRouteBtn = document.getElementById('new-route-btn');
+        if (newRouteBtn) newRouteBtn.textContent = t.btn_new_route;
+        const gpxEditBtn = document.getElementById('gpx-edit-btn');
+        if (gpxEditBtn) gpxEditBtn.textContent = t.btn_edit;
+        const doneEditBtn = document.getElementById('done-edit-btn');
+        if (doneEditBtn) doneEditBtn.textContent = t.btn_done_edit;
+        const cancelEditBtn = document.getElementById('cancel-edit-btn');
+        if (cancelEditBtn) cancelEditBtn.textContent = t.btn_cancel_edit;
+        const saveGpxBtn = document.getElementById('save-gpx-btn');
+        if (saveGpxBtn) saveGpxBtn.textContent = t.btn_save_gpx;
+        const addWpBtn = document.getElementById('add-waypoint-btn');
+        if (addWpBtn) addWpBtn.textContent = t.btn_add_waypoint;
+        const undoBtn = document.getElementById('undo-btn');
+        if (undoBtn) undoBtn.textContent = t.btn_undo;
+        const redoBtn = document.getElementById('redo-btn');
+        if (redoBtn) redoBtn.textContent = t.btn_redo;
+        const lblGpxName = document.getElementById('lbl-gpx-name');
+        if (lblGpxName) lblGpxName.textContent = t.lbl_gpx_name;
+        const lblActivity = document.getElementById('lbl-activity');
+        if (lblActivity) lblActivity.textContent = t.lbl_activity;
+        const lblRouting = document.getElementById('lbl-routing');
+        if (lblRouting) lblRouting.textContent = t.lbl_routing;
+        const gpxNameInput = document.getElementById('gpx-name-input');
+        if (gpxNameInput) gpxNameInput.placeholder = t.ph_gpx_name;
+        const optHiking = document.getElementById('opt-hiking');
+        if (optHiking) optHiking.textContent = t.opt_hiking;
+        const optCycling = document.getElementById('opt-cycling');
+        if (optCycling) optCycling.textContent = t.opt_cycling;
+        const optRunning = document.getElementById('opt-running');
+        if (optRunning) optRunning.textContent = t.opt_running;
+        const optDriving = document.getElementById('opt-driving');
+        if (optDriving) optDriving.textContent = t.opt_driving;
+        const lblSavedRoutes = document.getElementById('lbl-saved-routes');
+        if (lblSavedRoutes) lblSavedRoutes.textContent = t.lbl_saved_routes;
     }
 }
 
@@ -437,6 +475,8 @@ window.clearGpxRoute = function () {
     gpxTrackData = null;
     const clearBtn = document.getElementById('gpx-clear-btn');
     if (clearBtn) clearBtn.style.display = 'none';
+    const editBtn = document.getElementById('gpx-edit-btn');
+    if (editBtn) editBtn.style.display = 'none';
     const infoDiv = document.getElementById('gpx-track-info');
     if (infoDiv) { infoDiv.style.display = 'none'; infoDiv.innerHTML = ''; }
     hideElevationProfile();
@@ -838,6 +878,12 @@ document.getElementById('gpx-file-input').addEventListener('change', function (e
             const stats = computeTrackStats(allSegments);
             gpxTrackData = { segments: allSegments, waypoints, ...stats };
 
+            // Extract GPX name from metadata for edit mode
+            const metaName = doc.querySelector('metadata > name') || doc.querySelector('trk > name');
+            if (metaName) gpxTrackData._gpxName = metaName.textContent.trim();
+            const trkType = doc.querySelector('trk > type');
+            if (trkType) gpxTrackData._gpxType = trkType.textContent.trim();
+
             rebuildGpxLayer();
             updateGpxTrackInfo();
             showElevationProfile();
@@ -853,6 +899,8 @@ document.getElementById('gpx-file-input').addEventListener('change', function (e
 
             const clearBtn = document.getElementById('gpx-clear-btn');
             if (clearBtn) clearBtn.style.display = 'block';
+            const editBtn = document.getElementById('gpx-edit-btn');
+            if (editBtn) editBtn.style.display = 'block';
 
             statusDiv.textContent = t.status_gpx_loaded.replace('{n}', totalPoints);
         } catch (err) {
@@ -867,21 +915,31 @@ document.getElementById('gpx-file-input').addEventListener('change', function (e
 });
 
 // Live-update track when settings change
-document.getElementById('gpxTrackColor').addEventListener('input', function () { rebuildGpxLayer(); });
+document.getElementById('gpxTrackColor').addEventListener('input', function () {
+    if (editState.enabled) rebuildEditLayer(); else rebuildGpxLayer();
+});
 document.getElementById('gpxTrackWidth').addEventListener('input', function () {
     document.getElementById('gpxTrackWidthVal').textContent = this.value;
-    rebuildGpxLayer();
+    if (editState.enabled) rebuildEditLayer(); else rebuildGpxLayer();
 });
-document.getElementById('gpxShowKmLabels').addEventListener('change', function () { rebuildGpxLayer(); });
-document.getElementById('gpxColorBySlope').addEventListener('change', function () { rebuildGpxLayer(); });
-document.getElementById('gpxShowWaypoints').addEventListener('change', function () { rebuildGpxLayer(); });
-document.getElementById('gpxShowMinMax').addEventListener('change', function () { rebuildGpxLayer(); });
+document.getElementById('gpxShowKmLabels').addEventListener('change', function () {
+    if (editState.enabled) rebuildEditLayer(); else rebuildGpxLayer();
+});
+document.getElementById('gpxColorBySlope').addEventListener('change', function () {
+    if (editState.enabled) rebuildEditLayer(); else rebuildGpxLayer();
+});
+document.getElementById('gpxShowWaypoints').addEventListener('change', function () {
+    if (editState.enabled) rebuildEditLayer(); else rebuildGpxLayer();
+});
+document.getElementById('gpxShowMinMax').addEventListener('change', function () {
+    if (editState.enabled) rebuildEditLayer(); else rebuildGpxLayer();
+});
 document.getElementById('gpxShowElevProfile').addEventListener('change', function () {
     if (this.checked) { showElevationProfile(); } else { hideElevationProfile(); }
 });
 document.getElementById('distanceUnit').addEventListener('change', function () {
     localStorage.setItem('gpxv_distance_unit', this.value);
-    rebuildGpxLayer();
+    if (editState.enabled) rebuildEditLayer(); else rebuildGpxLayer();
     updateGpxTrackInfo();
     if (elevationProfileData && !elevationProfileMinimized) drawElevationProfile();
 });
@@ -1560,13 +1618,1085 @@ function removeElevationMarker() {
 })();
 
 // ==========================================
+// 5d. ROUTE EDITOR — STATE & ORS INTEGRATION
+// ==========================================
+
+let editState = {
+    enabled: false,
+    routingEnabled: true,
+    activityType: 'hiking',
+    gpxName: '',
+    anchors: [],          // [{id, lat, lon, ele, importance}]
+    segments: [],         // [{fromId, toId, points: [{lat,lon,ele}], routed: bool}]
+    waypoints: [],        // [{id, lat, lon, name, desc}]
+    undoStack: [],
+    redoStack: [],
+    originalGpxData: null,
+    waypointMode: false,
+    routeCache: new Map(),
+};
+
+let editLayer = null;
+let editAnchorMarkers = [];
+let editGhostMarker = null;
+let editWaypointMarkers = [];
+let _editIdCounter = 0;
+
+function generateEditId() { return ++_editIdCounter; }
+
+// ORS service config (reuses lockedServices pattern for key modal)
+const ORS_STORAGE_KEY = 'gpxv_ors_key';
+const ORS_LINK = 'https://openrouteservice.org/dev/#/signup';
+
+function getOrsApiKey() { return localStorage.getItem(ORS_STORAGE_KEY) || ''; }
+
+function showOrsKeyModal() {
+    const t = translations[currentLang];
+    pendingServiceKey = '_ors';
+    const modalTitle = document.getElementById('modal-title');
+    const modalText = document.getElementById('modal-text');
+    const modalLink = document.getElementById('modal-link');
+    const keyInput = document.getElementById('api-key-input');
+    modalTitle.textContent = t.modal_ors_title;
+    modalText.textContent = t.modal_ors_text;
+    modalLink.href = ORS_LINK;
+    modalLink.textContent = ORS_LINK;
+    keyInput.value = getOrsApiKey();
+    document.getElementById('key-modal').style.display = 'flex';
+}
+
+// Patch saveApiKey to handle ORS
+const _origSaveApiKey = saveApiKey;
+saveApiKey = function () {
+    if (pendingServiceKey === '_ors') {
+        const t = translations[currentLang];
+        const keyInput = document.getElementById('api-key-input');
+        const key = keyInput.value.trim();
+        if (!key) { alert(t.msg_api_alert); return; }
+        localStorage.setItem(ORS_STORAGE_KEY, key);
+        document.getElementById('key-modal').style.display = 'none';
+        pendingServiceKey = null;
+        return;
+    }
+    _origSaveApiKey();
+};
+
+// ORS profile mapping
+function getOrsProfile(activityType) {
+    const profiles = {
+        hiking: 'foot-hiking',
+        cycling: 'cycling-regular',
+        running: 'foot-walking',
+        driving: 'driving-car'
+    };
+    return profiles[activityType] || 'foot-hiking';
+}
+
+// Route a segment between two points via ORS
+async function routeSegmentORS(fromLat, fromLon, toLat, toLon) {
+    const key = getOrsApiKey();
+    if (!key) throw new Error('No ORS key');
+    const profile = getOrsProfile(editState.activityType);
+    const url = `https://api.openrouteservice.org/v2/directions/${profile}?api_key=${encodeURIComponent(key)}&start=${fromLon},${fromLat}&end=${toLon},${toLat}&elevation=true`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`ORS ${resp.status}`);
+    const data = await resp.json();
+    const coords = data.features[0].geometry.coordinates;
+    return coords.map(c => ({ lat: c[1], lon: c[0], ele: c.length > 2 ? c[2] : null }));
+}
+
+// Route or straight line between two anchors
+async function computeSegment(fromAnchor, toAnchor) {
+    if (!editState.routingEnabled) {
+        return {
+            fromId: fromAnchor.id, toId: toAnchor.id,
+            points: [
+                { lat: fromAnchor.lat, lon: fromAnchor.lon, ele: fromAnchor.ele || null },
+                { lat: toAnchor.lat, lon: toAnchor.lon, ele: toAnchor.ele || null }
+            ],
+            routed: false
+        };
+    }
+    const cacheKey = `${fromAnchor.lat},${fromAnchor.lon}-${toAnchor.lat},${toAnchor.lon}-${editState.activityType}`;
+    if (editState.routeCache.has(cacheKey)) {
+        const pts = editState.routeCache.get(cacheKey);
+        return { fromId: fromAnchor.id, toId: toAnchor.id, points: pts, routed: true };
+    }
+    try {
+        const pts = await routeSegmentORS(fromAnchor.lat, fromAnchor.lon, toAnchor.lat, toAnchor.lon);
+        editState.routeCache.set(cacheKey, pts);
+        return { fromId: fromAnchor.id, toId: toAnchor.id, points: pts, routed: true };
+    } catch (e) {
+        statusDiv.textContent = translations[currentLang].status_route_error;
+        return {
+            fromId: fromAnchor.id, toId: toAnchor.id,
+            points: [
+                { lat: fromAnchor.lat, lon: fromAnchor.lon, ele: fromAnchor.ele || null },
+                { lat: toAnchor.lat, lon: toAnchor.lon, ele: toAnchor.ele || null }
+            ],
+            routed: false
+        };
+    }
+}
+
+// Batch re-route all segments with throttling
+async function rerouteAllSegments() {
+    const t = translations[currentLang];
+    statusDiv.textContent = t.status_rerouting;
+    editState.routeCache.clear();
+    const newSegments = [];
+    for (let i = 0; i < editState.anchors.length - 1; i++) {
+        const seg = await computeSegment(editState.anchors[i], editState.anchors[i + 1]);
+        newSegments.push(seg);
+        if (i % 5 === 4) await new Promise(r => setTimeout(r, 200)); // throttle
+    }
+    editState.segments = newSegments;
+    syncEditToGpxData();
+    rebuildEditLayer();
+    statusDiv.textContent = t.status_edit_mode;
+}
+
+// ==========================================
+// 5e. UNDO / REDO
+// ==========================================
+
+function cloneEditSnapshot() {
+    return {
+        anchors: JSON.parse(JSON.stringify(editState.anchors)),
+        segments: JSON.parse(JSON.stringify(editState.segments)),
+        waypoints: JSON.parse(JSON.stringify(editState.waypoints)),
+    };
+}
+
+function restoreEditSnapshot(snap) {
+    editState.anchors = snap.anchors;
+    editState.segments = snap.segments;
+    editState.waypoints = snap.waypoints;
+}
+
+function pushUndo() {
+    editState.undoStack.push(cloneEditSnapshot());
+    if (editState.undoStack.length > 50) editState.undoStack.shift();
+    editState.redoStack = [];
+    updateUndoRedoButtons();
+}
+
+window.editUndo = function () {
+    if (editState.undoStack.length === 0) return;
+    editState.redoStack.push(cloneEditSnapshot());
+    restoreEditSnapshot(editState.undoStack.pop());
+    syncEditToGpxData();
+    rebuildEditLayer();
+    updateUndoRedoButtons();
+};
+
+window.editRedo = function () {
+    if (editState.redoStack.length === 0) return;
+    editState.undoStack.push(cloneEditSnapshot());
+    restoreEditSnapshot(editState.redoStack.pop());
+    syncEditToGpxData();
+    rebuildEditLayer();
+    updateUndoRedoButtons();
+};
+
+function updateUndoRedoButtons() {
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    if (undoBtn) undoBtn.disabled = editState.undoStack.length === 0;
+    if (redoBtn) redoBtn.disabled = editState.redoStack.length === 0;
+}
+
+// Ctrl+Z / Ctrl+Y keyboard shortcuts
+document.addEventListener('keydown', function (e) {
+    if (!editState.enabled) return;
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); editUndo(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); editRedo(); }
+});
+
+// ==========================================
+// 5f. DOUGLAS-PEUCKER WITH IMPORTANCE
+// ==========================================
+
+function douglasPeuckerWithImportance(points) {
+    if (points.length <= 2) {
+        return points.map((p, i) => ({ ...p, importance: 1.0 }));
+    }
+
+    const n = points.length;
+    const importance = new Float64Array(n);
+    importance[0] = 1.0;
+    importance[n - 1] = 1.0;
+
+    // Perpendicular distance from point to line (start, end)
+    function perpDist(idx, startIdx, endIdx) {
+        const A = points[startIdx], B = points[endIdx], P = points[idx];
+        const dx = B.lon - A.lon, dy = B.lat - A.lat;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) return haversineDistance(P.lat, P.lon, A.lat, A.lon);
+        const t = Math.max(0, Math.min(1, ((P.lon - A.lon) * dx + (P.lat - A.lat) * dy) / lenSq));
+        const projLat = A.lat + t * dy, projLon = A.lon + t * dx;
+        return haversineDistance(P.lat, P.lon, projLat, projLon);
+    }
+
+    // Iterative DP using a stack
+    const stack = [[0, n - 1]];
+    let maxDeviation = 0;
+    // First pass: find global max deviation for normalization
+    const deviations = new Float64Array(n);
+    const dpStack = [[0, n - 1]];
+    while (dpStack.length > 0) {
+        const [start, end] = dpStack.pop();
+        if (end - start < 2) continue;
+        let maxDist = 0, maxIdx = start;
+        for (let i = start + 1; i < end; i++) {
+            const d = perpDist(i, start, end);
+            if (d > maxDist) { maxDist = d; maxIdx = i; }
+        }
+        if (maxDist > 0) {
+            deviations[maxIdx] = maxDist;
+            if (maxDist > maxDeviation) maxDeviation = maxDist;
+            dpStack.push([start, maxIdx]);
+            dpStack.push([maxIdx, end]);
+        }
+    }
+
+    // Assign importance: higher deviation → higher importance
+    if (maxDeviation > 0) {
+        for (let i = 1; i < n - 1; i++) {
+            importance[i] = Math.min(1.0, deviations[i] / maxDeviation);
+        }
+    }
+
+    return points.map((p, i) => ({ ...p, importance: importance[i] }));
+}
+
+function getImportanceThreshold(zoom) {
+    // More zoom → lower threshold → more anchors visible
+    if (zoom >= 18) return 0;
+    if (zoom >= 16) return 0.02;
+    if (zoom >= 14) return 0.05;
+    if (zoom >= 12) return 0.1;
+    if (zoom >= 10) return 0.2;
+    if (zoom >= 8) return 0.4;
+    return 0.6;
+}
+
+function getVisibleAnchors() {
+    const threshold = getImportanceThreshold(map.getZoom());
+    return editState.anchors.filter(a => a.importance >= threshold);
+}
+
+// ==========================================
+// 5g. GENERATE ANCHORS FROM GPX
+// ==========================================
+
+function generateAnchorsFromGpx() {
+    if (!gpxTrackData || !gpxTrackData.segments) return;
+
+    // Flatten all segments into a single point array
+    const allPts = [];
+    for (const seg of gpxTrackData.segments) {
+        for (const p of seg) {
+            allPts.push({ lat: p.lat, lon: p.lon, ele: p.ele });
+        }
+    }
+    if (allPts.length === 0) return;
+
+    const withImportance = douglasPeuckerWithImportance(allPts);
+    editState.anchors = withImportance.map(p => ({
+        id: generateEditId(),
+        lat: p.lat, lon: p.lon, ele: p.ele,
+        importance: p.importance
+    }));
+
+    // Build segments between consecutive anchors using original GPX geometry
+    editState.segments = [];
+    for (let i = 0; i < editState.anchors.length - 1; i++) {
+        // Find original points between these two anchor positions
+        const from = editState.anchors[i];
+        const to = editState.anchors[i + 1];
+        // For initial load, use the original track points between anchor indices
+        const fromIdx = withImportance.indexOf(withImportance.find(p => p.lat === from.lat && p.lon === from.lon));
+        const toIdx = withImportance.indexOf(withImportance.find(p => p.lat === to.lat && p.lon === to.lon));
+        const segPts = [];
+        for (let j = fromIdx; j <= toIdx; j++) {
+            segPts.push({ lat: allPts[j].lat, lon: allPts[j].lon, ele: allPts[j].ele });
+        }
+        editState.segments.push({
+            fromId: from.id, toId: to.id,
+            points: segPts.length >= 2 ? segPts : [
+                { lat: from.lat, lon: from.lon, ele: from.ele },
+                { lat: to.lat, lon: to.lon, ele: to.ele }
+            ],
+            routed: false
+        });
+    }
+
+    // Copy waypoints
+    editState.waypoints = (gpxTrackData.waypoints || []).map(w => ({
+        id: generateEditId(),
+        lat: w.lat, lon: w.lon,
+        name: w.name || '', desc: w.desc || ''
+    }));
+
+    // Try to extract GPX name from metadata
+    editState.gpxName = editState.gpxName || '';
+}
+
+// ==========================================
+// 5h. EDIT LAYER RENDERING
+// ==========================================
+
+function rebuildEditLayer() {
+    if (!editState.enabled) return;
+
+    // Remove old layer
+    if (editLayer) { map.removeLayer(editLayer); editLayer = null; }
+    editAnchorMarkers = [];
+    if (editGhostMarker) { map.removeLayer(editGhostMarker); editGhostMarker = null; }
+
+    const color = getGpxTrackColor();
+    const weight = getGpxTrackWidth();
+    const colorBySlope = getGpxColorBySlope();
+    const mapLayers = [];
+
+    // Draw segments
+    for (let si = 0; si < editState.segments.length; si++) {
+        const seg = editState.segments[si];
+        if (!seg.points || seg.points.length < 2) continue;
+        if (colorBySlope) {
+            mapLayers.push(...buildSlopeColoredTrack(seg.points, weight, color));
+        } else {
+            const coords = seg.points.map(p => [p.lat, p.lon]);
+            mapLayers.push(L.polyline(coords, { color, weight, opacity: 0.85 }));
+        }
+    }
+
+    // Segment polylines for ghost anchor insertion
+    for (let si = 0; si < editState.segments.length; si++) {
+        const seg = editState.segments[si];
+        if (!seg.points || seg.points.length < 2) continue;
+        const coords = seg.points.map(p => [p.lat, p.lon]);
+        const hitLine = L.polyline(coords, { color: 'transparent', weight: Math.max(weight + 10, 20), opacity: 0 });
+        hitLine._segIndex = si;
+        hitLine.on('mouseover', onSegmentMouseOver);
+        hitLine.on('mousemove', onSegmentMouseMove);
+        hitLine.on('mouseout', onSegmentMouseOut);
+        hitLine.on('click', onSegmentClick);
+        mapLayers.push(hitLine);
+    }
+
+    // Draw visible anchors
+    const visibleAnchors = getVisibleAnchors();
+    for (const anchor of visibleAnchors) {
+        const icon = L.divIcon({ className: 'anchor-marker', iconSize: [14, 14], iconAnchor: [7, 7] });
+        const marker = L.marker([anchor.lat, anchor.lon], { icon, draggable: true, _anchorId: anchor.id });
+        marker.on('dragstart', onAnchorDragStart);
+        marker.on('drag', onAnchorDrag);
+        marker.on('dragend', onAnchorDragEnd);
+        marker.on('contextmenu', onAnchorRightClick);
+
+        // Long press for mobile delete
+        let longPressTimer = null;
+        marker.on('mousedown', () => { longPressTimer = setTimeout(() => onAnchorDelete(anchor.id), 500); });
+        marker.on('mouseup', () => { clearTimeout(longPressTimer); });
+        marker.on('dragstart', () => { clearTimeout(longPressTimer); });
+
+        editAnchorMarkers.push(marker);
+        mapLayers.push(marker);
+    }
+
+    // Draw waypoints
+    for (const wp of editState.waypoints) {
+        const label = wp.name || '📍';
+        const icon = L.divIcon({ className: 'gpx-waypoint-label waypoint-edit-marker', html: label, iconSize: null });
+        const marker = L.marker([wp.lat, wp.lon], { icon, draggable: true, _wpId: wp.id });
+        marker.on('dragend', function () {
+            pushUndo();
+            const latlng = this.getLatLng();
+            const w = editState.waypoints.find(x => x.id === wp.id);
+            if (w) { w.lat = latlng.lat; w.lon = latlng.lng; }
+            syncEditToGpxData();
+            rebuildEditLayer();
+        });
+        marker.on('click', function () { openWaypointPopup(wp.id, this); });
+        editWaypointMarkers.push(marker);
+        mapLayers.push(marker);
+    }
+
+    // Show km labels if enabled
+    if (getGpxShowKmLabels() && editState.segments.length > 0) {
+        const allSegPts = editState.segments.map(s => s.points);
+        const kmLabels = buildKmLabels(allSegPts);
+        mapLayers.push(...kmLabels);
+    }
+
+    // Start/End markers
+    if (editState.anchors.length > 0) {
+        const t = translations[currentLang];
+        const startA = editState.anchors[0];
+        const endA = editState.anchors[editState.anchors.length - 1];
+        const OVERLAP = 50;
+        const overlap = editState.anchors.length > 1 && haversineDistance(startA.lat, startA.lon, endA.lat, endA.lon) < OVERLAP;
+        if (overlap) {
+            const lbl = `⏵ ${t.gpx_start || 'Start'} / ${t.gpx_end || 'End'}`;
+            mapLayers.push(L.marker([startA.lat, startA.lon], { icon: L.divIcon({ className: 'gpx-start-end-label', html: lbl, iconSize: null }), interactive: false }));
+        } else {
+            mapLayers.push(L.marker([startA.lat, startA.lon], { icon: L.divIcon({ className: 'gpx-start-end-label', html: `▶ ${t.gpx_start || 'Start'}`, iconSize: null }), interactive: false }));
+            if (editState.anchors.length > 1) {
+                mapLayers.push(L.marker([endA.lat, endA.lon], { icon: L.divIcon({ className: 'gpx-start-end-label', html: `⏹ ${t.gpx_end || 'End'}`, iconSize: null }), interactive: false }));
+            }
+        }
+    }
+
+    // Min/Max elevation
+    if (getGpxShowMinMax() && editState.segments.length > 0) {
+        const allSegPts = editState.segments.map(s => s.points);
+        const { minPt, maxPt } = findMinMaxElevPoints(allSegPts);
+        if (maxPt) {
+            mapLayers.push(L.marker([maxPt.lat, maxPt.lon], { icon: L.divIcon({ className: 'gpx-elev-label', html: `▲ ${Math.round(maxPt.ele)} m`, iconSize: null }), interactive: false }));
+        }
+        if (minPt) {
+            mapLayers.push(L.marker([minPt.lat, minPt.lon], { icon: L.divIcon({ className: 'gpx-elev-label min-elev', html: `▼ ${Math.round(minPt.ele)} m`, iconSize: null }), interactive: false }));
+        }
+    }
+
+    if (mapLayers.length > 0) {
+        editLayer = L.layerGroup(mapLayers).addTo(map);
+    }
+
+    // Update stats
+    syncEditToGpxData();
+    updateGpxTrackInfo();
+    showElevationProfile();
+}
+
+// Sync edit state to gpxTrackData for stats/elevation
+function syncEditToGpxData() {
+    const allSegPts = editState.segments.map(s => s.points);
+    const stats = computeTrackStats(allSegPts);
+    gpxTrackData = {
+        segments: allSegPts,
+        waypoints: editState.waypoints.map(w => ({ lat: w.lat, lon: w.lon, name: w.name })),
+        ...stats
+    };
+}
+
+// ==========================================
+// 5i. ANCHOR INTERACTION HANDLERS
+// ==========================================
+
+function onAnchorDragStart(e) {
+    pushUndo();
+}
+
+function onAnchorDrag(e) {
+    // Real-time preview: update anchor position and show straight-line preview
+    const marker = e.target;
+    const anchorId = marker.options._anchorId;
+    const latlng = marker.getLatLng();
+    const anchor = editState.anchors.find(a => a.id === anchorId);
+    if (anchor) {
+        anchor.lat = latlng.lat;
+        anchor.lon = latlng.lng;
+    }
+}
+
+async function onAnchorDragEnd(e) {
+    const marker = e.target;
+    const anchorId = marker.options._anchorId;
+    const latlng = marker.getLatLng();
+    const anchor = editState.anchors.find(a => a.id === anchorId);
+    if (!anchor) return;
+    anchor.lat = latlng.lat;
+    anchor.lon = latlng.lng;
+
+    const idx = editState.anchors.indexOf(anchor);
+    const t = translations[currentLang];
+    statusDiv.textContent = t.status_routing;
+
+    // Recompute adjacent segments
+    if (idx > 0) {
+        editState.segments[idx - 1] = await computeSegment(editState.anchors[idx - 1], anchor);
+    }
+    if (idx < editState.anchors.length - 1) {
+        editState.segments[idx] = await computeSegment(anchor, editState.anchors[idx + 1]);
+    }
+
+    syncEditToGpxData();
+    rebuildEditLayer();
+    statusDiv.textContent = t.status_edit_mode;
+}
+
+function onAnchorRightClick(e) {
+    L.DomEvent.preventDefault(e);
+    const anchorId = e.target.options._anchorId;
+    onAnchorDelete(anchorId);
+}
+
+async function onAnchorDelete(anchorId) {
+    const idx = editState.anchors.findIndex(a => a.id === anchorId);
+    if (idx === -1) return;
+    if (editState.anchors.length <= 1) return; // Keep at least one anchor
+
+    pushUndo();
+    const t = translations[currentLang];
+
+    editState.anchors.splice(idx, 1);
+
+    // Rebuild segments around deleted anchor
+    if (idx === 0) {
+        // Removed first anchor, remove first segment
+        editState.segments.shift();
+    } else if (idx >= editState.anchors.length) {
+        // Removed last anchor, remove last segment
+        editState.segments.pop();
+    } else {
+        // Removed middle anchor, merge two segments into one
+        statusDiv.textContent = t.status_routing;
+        const newSeg = await computeSegment(editState.anchors[idx - 1], editState.anchors[idx]);
+        editState.segments.splice(idx - 1, 2, newSeg);
+    }
+
+    syncEditToGpxData();
+    rebuildEditLayer();
+    statusDiv.textContent = t.status_anchor_deleted;
+}
+
+// Ghost anchor on segment hover
+function onSegmentMouseOver(e) {
+    if (editGhostMarker) return;
+    showGhostAnchor(e);
+}
+
+function onSegmentMouseMove(e) {
+    if (!editGhostMarker) {
+        showGhostAnchor(e);
+        return;
+    }
+    editGhostMarker.setLatLng(e.latlng);
+}
+
+function onSegmentMouseOut(e) {
+    removeGhostAnchor();
+}
+
+function showGhostAnchor(e) {
+    if (editGhostMarker) return;
+    const icon = L.divIcon({ className: 'anchor-marker ghost', iconSize: [14, 14], iconAnchor: [7, 7] });
+    editGhostMarker = L.marker(e.latlng, { icon, draggable: true });
+    editGhostMarker._segIndex = e.target._segIndex;
+    editGhostMarker.addTo(map);
+    editGhostMarker.on('dragstart', onGhostDragStart);
+    editGhostMarker.on('dragend', onGhostDragEnd);
+}
+
+function removeGhostAnchor() {
+    if (editGhostMarker) {
+        map.removeLayer(editGhostMarker);
+        editGhostMarker = null;
+    }
+}
+
+function onGhostDragStart(e) {
+    pushUndo();
+}
+
+async function onGhostDragEnd(e) {
+    const latlng = e.target.getLatLng();
+    const segIdx = e.target._segIndex;
+    removeGhostAnchor();
+
+    if (segIdx === undefined || segIdx < 0 || segIdx >= editState.segments.length) return;
+    const t = translations[currentLang];
+    statusDiv.textContent = t.status_routing;
+
+    // Insert new anchor between anchors[segIdx] and anchors[segIdx+1]
+    const newAnchor = {
+        id: generateEditId(),
+        lat: latlng.lat, lon: latlng.lng, ele: null,
+        importance: 0.5
+    };
+    editState.anchors.splice(segIdx + 1, 0, newAnchor);
+
+    // Replace old segment with two new segments
+    const seg1 = await computeSegment(editState.anchors[segIdx], newAnchor);
+    const seg2 = await computeSegment(newAnchor, editState.anchors[segIdx + 2]);
+    editState.segments.splice(segIdx, 1, seg1, seg2);
+
+    syncEditToGpxData();
+    rebuildEditLayer();
+    statusDiv.textContent = t.status_edit_mode;
+}
+
+// Segment tap on touch to insert anchor
+async function onSegmentClick(e) {
+    if (!('ontouchstart' in window)) return; // Only for touch devices
+    L.DomEvent.stopPropagation(e);
+    const segIdx = e.target._segIndex;
+    if (segIdx === undefined) return;
+
+    pushUndo();
+    const t = translations[currentLang];
+    statusDiv.textContent = t.status_routing;
+
+    const newAnchor = {
+        id: generateEditId(),
+        lat: e.latlng.lat, lon: e.latlng.lng, ele: null,
+        importance: 0.5
+    };
+    editState.anchors.splice(segIdx + 1, 0, newAnchor);
+
+    const seg1 = await computeSegment(editState.anchors[segIdx], newAnchor);
+    const seg2 = await computeSegment(newAnchor, editState.anchors[segIdx + 2]);
+    editState.segments.splice(segIdx, 1, seg1, seg2);
+
+    syncEditToGpxData();
+    rebuildEditLayer();
+    statusDiv.textContent = t.status_edit_mode;
+}
+
+// Map click handler for adding new anchors
+async function onEditMapClick(e) {
+    if (editState.waypointMode) {
+        onWaypointMapClick(e);
+        return;
+    }
+
+    pushUndo();
+    const t = translations[currentLang];
+
+    const newAnchor = {
+        id: generateEditId(),
+        lat: e.latlng.lat, lon: e.latlng.lng, ele: null,
+        importance: 1.0
+    };
+    editState.anchors.push(newAnchor);
+
+    if (editState.anchors.length > 1) {
+        statusDiv.textContent = t.status_routing;
+        const prevAnchor = editState.anchors[editState.anchors.length - 2];
+        const seg = await computeSegment(prevAnchor, newAnchor);
+        editState.segments.push(seg);
+    }
+
+    syncEditToGpxData();
+    rebuildEditLayer();
+    statusDiv.textContent = t.status_edit_mode;
+}
+
+// ==========================================
+// 5j. WAYPOINT EDITING
+// ==========================================
+
+window.toggleWaypointMode = function () {
+    const t = translations[currentLang];
+    editState.waypointMode = !editState.waypointMode;
+    const btn = document.getElementById('add-waypoint-btn');
+    if (editState.waypointMode) {
+        btn.style.outline = '2px solid #1976D2';
+        statusDiv.textContent = t.status_waypoint_mode;
+    } else {
+        btn.style.outline = '';
+        statusDiv.textContent = t.status_edit_mode;
+    }
+};
+
+function onWaypointMapClick(e) {
+    pushUndo();
+    const wp = {
+        id: generateEditId(),
+        lat: e.latlng.lat, lon: e.latlng.lng,
+        name: '', desc: ''
+    };
+    editState.waypoints.push(wp);
+    editState.waypointMode = false;
+    const btn = document.getElementById('add-waypoint-btn');
+    if (btn) btn.style.outline = '';
+    syncEditToGpxData();
+    rebuildEditLayer();
+
+    // Find the newly created marker and open popup
+    setTimeout(() => {
+        const marker = editWaypointMarkers.find(m => m.options._wpId === wp.id);
+        if (marker) openWaypointPopup(wp.id, marker);
+    }, 100);
+}
+
+function openWaypointPopup(wpId, marker) {
+    const wp = editState.waypoints.find(w => w.id === wpId);
+    if (!wp) return;
+    const t = translations[currentLang];
+
+    const html = `
+        <div>
+            <input type="text" class="wp-name-input" value="${wp.name.replace(/"/g, '&quot;')}" placeholder="${t.ph_waypoint_name}">
+            <input type="text" class="wp-desc-input" value="${(wp.desc || '').replace(/"/g, '&quot;')}" placeholder="${t.ph_waypoint_desc}">
+            <div class="wp-popup-btns">
+                <button class="wp-save-btn" onclick="saveWaypointFromPopup(${wpId})">${t.btn_wp_save}</button>
+                <button class="wp-delete-btn" onclick="deleteWaypoint(${wpId})">${t.btn_wp_delete}</button>
+            </div>
+        </div>
+    `;
+    marker.unbindPopup();
+    marker.bindPopup(html, { className: 'waypoint-edit-popup', closeButton: true, minWidth: 180 }).openPopup();
+}
+
+window.saveWaypointFromPopup = function (wpId) {
+    const wp = editState.waypoints.find(w => w.id === wpId);
+    if (!wp) return;
+    const popup = document.querySelector('.waypoint-edit-popup');
+    if (!popup) return;
+    const nameInput = popup.querySelector('.wp-name-input');
+    const descInput = popup.querySelector('.wp-desc-input');
+    if (nameInput) wp.name = nameInput.value.trim();
+    if (descInput) wp.desc = descInput.value.trim();
+    map.closePopup();
+    syncEditToGpxData();
+    rebuildEditLayer();
+};
+
+window.deleteWaypoint = function (wpId) {
+    pushUndo();
+    editState.waypoints = editState.waypoints.filter(w => w.id !== wpId);
+    map.closePopup();
+    syncEditToGpxData();
+    rebuildEditLayer();
+};
+
+// ==========================================
+// 5k. ENTER / EXIT EDIT MODE
+// ==========================================
+
+window.enterEditMode = function (isNewRoute) {
+    const t = translations[currentLang];
+
+    // Check ORS key if routing enabled
+    if (document.getElementById('routing-toggle').checked && !getOrsApiKey()) {
+        showOrsKeyModal();
+        // After key saved, try again
+        const origPending = pendingServiceKey;
+        const checkInterval = setInterval(() => {
+            if (document.getElementById('key-modal').style.display === 'none') {
+                clearInterval(checkInterval);
+                if (getOrsApiKey()) {
+                    _doEnterEditMode(isNewRoute);
+                }
+            }
+        }, 200);
+        return;
+    }
+    _doEnterEditMode(isNewRoute);
+};
+
+function _doEnterEditMode(isNewRoute) {
+    const t = translations[currentLang];
+    editState.enabled = true;
+    editState.routingEnabled = document.getElementById('routing-toggle').checked;
+    editState.undoStack = [];
+    editState.redoStack = [];
+    editState.routeCache.clear();
+    editState.waypointMode = false;
+    _editIdCounter = 0;
+
+    if (isNewRoute) {
+        // New route: empty state
+        editState.anchors = [];
+        editState.segments = [];
+        editState.waypoints = [];
+        editState.gpxName = '';
+        editState.activityType = 'hiking';
+        // Clear existing GPX display
+        if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
+        gpxTrackData = null;
+    } else {
+        // Edit existing GPX
+        editState.originalGpxData = gpxTrackData ? JSON.parse(JSON.stringify(gpxTrackData)) : null;
+        editState.gpxName = (gpxTrackData && gpxTrackData._gpxName) || '';
+        editState.activityType = (gpxTrackData && gpxTrackData._gpxType) || document.getElementById('activity-select').value || 'hiking';
+        generateAnchorsFromGpx();
+        // Remove the view-mode layer
+        if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
+    }
+
+    // Show edit toolbar, hide view-mode buttons
+    document.getElementById('edit-toolbar').classList.remove('hidden');
+    document.getElementById('gpx-btn').style.display = 'none';
+    document.getElementById('new-route-btn').style.display = 'none';
+    const clearBtn = document.getElementById('gpx-clear-btn');
+    if (clearBtn) clearBtn.style.display = 'none';
+    const editBtn = document.getElementById('gpx-edit-btn');
+    if (editBtn) editBtn.style.display = 'none';
+
+    // Set UI values
+    document.getElementById('gpx-name-input').value = editState.gpxName;
+    document.getElementById('activity-select').value = editState.activityType;
+    document.getElementById('routing-toggle').checked = editState.routingEnabled;
+
+    // Add crosshair cursor to map
+    map.getContainer().classList.add('edit-mode-cursor');
+
+    // Register map click handler
+    map.on('click', onEditMapClick);
+
+    updateUndoRedoButtons();
+    rebuildEditLayer();
+    renderSavedRoutesList();
+    statusDiv.textContent = t.status_edit_mode;
+}
+
+window.exitEditMode = function (discard) {
+    const t = translations[currentLang];
+
+    if (discard && editState.undoStack.length > 0) {
+        if (!confirm(t.confirm_cancel_edit)) return;
+    }
+
+    // Remove edit layers
+    if (editLayer) { map.removeLayer(editLayer); editLayer = null; }
+    removeGhostAnchor();
+
+    editState.enabled = false;
+    editState.waypointMode = false;
+    map.getContainer().classList.remove('edit-mode-cursor');
+    map.off('click', onEditMapClick);
+
+    if (discard) {
+        // Restore original data
+        gpxTrackData = editState.originalGpxData;
+    } else {
+        // Keep edited data — already synced via syncEditToGpxData
+        syncEditToGpxData();
+    }
+
+    // Hide edit toolbar, show view-mode buttons
+    document.getElementById('edit-toolbar').classList.add('hidden');
+    document.getElementById('gpx-btn').style.display = '';
+    document.getElementById('new-route-btn').style.display = '';
+
+    if (gpxTrackData && (gpxTrackData.segments.length > 0 || gpxTrackData.waypoints.length > 0)) {
+        const clearBtn = document.getElementById('gpx-clear-btn');
+        if (clearBtn) clearBtn.style.display = 'block';
+        const editBtn = document.getElementById('gpx-edit-btn');
+        if (editBtn) editBtn.style.display = 'block';
+        rebuildGpxLayer();
+        updateGpxTrackInfo();
+        showElevationProfile();
+    } else {
+        hideElevationProfile();
+        const infoDiv = document.getElementById('gpx-track-info');
+        if (infoDiv) { infoDiv.style.display = 'none'; infoDiv.innerHTML = ''; }
+    }
+
+    // Clean up edit state
+    editState.anchors = [];
+    editState.segments = [];
+    editState.waypoints = [];
+    editState.undoStack = [];
+    editState.redoStack = [];
+    editState.originalGpxData = null;
+    editAnchorMarkers = [];
+    editWaypointMarkers = [];
+
+    statusDiv.textContent = t.status_ready;
+};
+
+// ==========================================
+// 5l. GPX EXPORT & LOCALSTORAGE SAVE
+// ==========================================
+
+function generateGpxXml() {
+    const name = editState.gpxName || 'Route';
+    const activity = editState.activityType || 'hiking';
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<gpx version="1.1" creator="Topo GPX Viewer"\n`;
+    xml += `  xmlns="http://www.topografix.com/GPX/1/1"\n`;
+    xml += `  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"\n`;
+    xml += `  xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">\n`;
+    xml += `  <metadata>\n    <name>${escapeXml(name)}</name>\n    <time>${new Date().toISOString()}</time>\n  </metadata>\n`;
+
+    // Waypoints
+    for (const wp of editState.waypoints) {
+        xml += `  <wpt lat="${wp.lat}" lon="${wp.lon}">\n`;
+        if (wp.name) xml += `    <name>${escapeXml(wp.name)}</name>\n`;
+        if (wp.desc) xml += `    <desc>${escapeXml(wp.desc)}</desc>\n`;
+        xml += `  </wpt>\n`;
+    }
+
+    // Track
+    xml += `  <trk>\n    <name>${escapeXml(name)}</name>\n    <type>${escapeXml(activity)}</type>\n    <trkseg>\n`;
+    for (const seg of editState.segments) {
+        for (const p of seg.points) {
+            xml += `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">`;
+            if (p.ele !== null && p.ele !== undefined) xml += `<ele>${p.ele.toFixed(1)}</ele>`;
+            xml += `</trkpt>\n`;
+        }
+    }
+    xml += `    </trkseg>\n  </trk>\n</gpx>\n`;
+    return xml;
+}
+
+function escapeXml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function exportGpxFile() {
+    const xml = generateGpxXml();
+    const blob = new Blob([xml], { type: 'application/gpx+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (editState.gpxName || 'route').replace(/[^a-zA-Z0-9_\-\s]/g, '') + '.gpx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function saveRouteToStorage() {
+    const t = translations[currentLang];
+    const route = {
+        gpxName: editState.gpxName || 'Unnamed Route',
+        activityType: editState.activityType,
+        anchors: editState.anchors,
+        segments: editState.segments,
+        waypoints: editState.waypoints,
+        timestamp: Date.now()
+    };
+    try {
+        const saved = JSON.parse(localStorage.getItem('gpxv_saved_routes') || '[]');
+        saved.push(route);
+        // Cap at 10 routes
+        while (saved.length > 10) saved.shift();
+        localStorage.setItem('gpxv_saved_routes', JSON.stringify(saved));
+    } catch (e) {
+        statusDiv.textContent = t.status_save_storage_full;
+        return false;
+    }
+    return true;
+}
+
+window.saveAndExportGpx = function () {
+    const t = translations[currentLang];
+    // Update name/activity from UI
+    editState.gpxName = document.getElementById('gpx-name-input').value.trim();
+    editState.activityType = document.getElementById('activity-select').value;
+
+    exportGpxFile();
+    saveRouteToStorage();
+    renderSavedRoutesList();
+    statusDiv.textContent = t.status_route_exported;
+};
+
+function getSavedRoutes() {
+    try {
+        return JSON.parse(localStorage.getItem('gpxv_saved_routes') || '[]');
+    } catch { return []; }
+}
+
+function renderSavedRoutesList() {
+    const container = document.getElementById('saved-routes-list');
+    if (!container) return;
+    const routes = getSavedRoutes();
+    const t = translations[currentLang];
+    if (routes.length === 0) {
+        container.innerHTML = `<div style="font-size:11px;color:#999;padding:4px;">${t.no_saved_routes}</div>`;
+        return;
+    }
+    let html = '';
+    routes.forEach((r, i) => {
+        const name = r.gpxName || 'Unnamed';
+        const date = new Date(r.timestamp).toLocaleDateString();
+        html += `<div class="saved-route-item">
+            <span class="saved-route-name" title="${escapeXml(name)} (${date})">${escapeXml(name)}</span>
+            <button class="btn-undo-redo" onclick="loadSavedRoute(${i})">${t.btn_load_saved}</button>
+            <button class="btn-undo-redo" onclick="deleteSavedRoute(${i})" style="color:#dc3545;">${t.btn_delete_saved}</button>
+        </div>`;
+    });
+    container.innerHTML = html;
+}
+
+window.loadSavedRoute = function (index) {
+    const routes = getSavedRoutes();
+    if (index < 0 || index >= routes.length) return;
+    const route = routes[index];
+
+    // Ensure we're in edit mode
+    if (!editState.enabled) {
+        _doEnterEditMode(true);
+    }
+
+    pushUndo();
+    editState.gpxName = route.gpxName || '';
+    editState.activityType = route.activityType || 'hiking';
+    editState.anchors = route.anchors || [];
+    editState.segments = route.segments || [];
+    editState.waypoints = route.waypoints || [];
+
+    document.getElementById('gpx-name-input').value = editState.gpxName;
+    document.getElementById('activity-select').value = editState.activityType;
+
+    // Fix IDs to avoid collisions
+    _editIdCounter = 0;
+    editState.anchors.forEach(a => { a.id = generateEditId(); });
+    editState.waypoints.forEach(w => { w.id = generateEditId(); });
+    // Rebuild segment fromId/toId
+    for (let i = 0; i < editState.segments.length; i++) {
+        if (editState.anchors[i]) editState.segments[i].fromId = editState.anchors[i].id;
+        if (editState.anchors[i + 1]) editState.segments[i].toId = editState.anchors[i + 1].id;
+    }
+
+    syncEditToGpxData();
+    rebuildEditLayer();
+    statusDiv.textContent = translations[currentLang].status_edit_mode;
+};
+
+window.deleteSavedRoute = function (index) {
+    const routes = getSavedRoutes();
+    if (index < 0 || index >= routes.length) return;
+    routes.splice(index, 1);
+    localStorage.setItem('gpxv_saved_routes', JSON.stringify(routes));
+    renderSavedRoutesList();
+};
+
+// ==========================================
+// 5m. EDIT MODE — EVENT LISTENERS
+// ==========================================
+
+// Routing toggle listener
+document.getElementById('routing-toggle').addEventListener('change', function () {
+    editState.routingEnabled = this.checked;
+    if (editState.enabled && editState.anchors.length > 1) {
+        rerouteAllSegments();
+    }
+});
+
+// Activity type change listener
+document.getElementById('activity-select').addEventListener('change', function () {
+    editState.activityType = this.value;
+    if (editState.enabled && editState.routingEnabled && editState.anchors.length > 1) {
+        pushUndo();
+        rerouteAllSegments();
+    }
+});
+
+// GPX name input listener
+document.getElementById('gpx-name-input').addEventListener('input', function () {
+    editState.gpxName = this.value.trim();
+});
+
+// ==========================================
 // 6. START LOGIC (Event Listeners & Init)
 // ==========================================
 
 if (searchInput) searchInput.addEventListener("keypress", (e) => { if (e.key === "Enter") searchLocation(); });
 
 // Map Events
-map.on('zoomend', () => { updateUI(); rebuildGpxLayer(); });
+map.on('zoomend', () => {
+    updateUI();
+    if (editState.enabled) { rebuildEditLayer(); }
+    else { rebuildGpxLayer(); }
+});
 map.on('move', () => { updateUI(); });
 map.on('moveend', () => {
     const center = map.getCenter();
@@ -1575,8 +2705,9 @@ map.on('moveend', () => {
     localStorage.setItem('gpxv_zoom', map.getZoom());
 });
 
-// Minimize controls on mobile when clicking the map
-map.on('click', () => {
+// Minimize controls on mobile when clicking the map (only when not in edit mode)
+map.on('click', (e) => {
+    if (editState.enabled) return; // handled by onEditMapClick
     if (window.innerWidth <= 600 && !isControlsMinimized) {
         toggleControls();
     }
