@@ -47,6 +47,8 @@ const LANG_EN = {
     tutorial_routes_text: "Load a GPX file to overlay a route on the map. Customize track color, width, and toggle distance labels, slope coloring, waypoints, min/max elevation markers, and an interactive elevation profile. Enable map sync to center the map on your position as you scrub the profile.",
     tutorial_search_title: "Search & Location",
     tutorial_search_text: "Search for any place by name or coordinates. Use the GPS button to jump to your current location.",
+    tutorial_share_title: "Share Map View",
+    tutorial_share_text: "Use this button to copy a link with your current zoom, center, and map layer so others open the same map view.",
     tutorial_tips_title: "💡 Tips",
     tutorial_tips_text: "• Load a GPX file to see your route with distance labels and elevation stats.\n• Use slope coloring to visualize uphills and downhills.\n• Rotate the map by holding Ctrl and dragging, or use two-finger rotation on touch devices. Tap the compass icon to reset north.\n• In the elevation profile, use ← → arrow keys to step along the track (hold Shift for bigger steps). Press Escape to clear.",
     tutorial_btn_next: "Next",
@@ -78,4 +80,7 @@ const LANG_EN = {
     lbl_show_elev_profile: "Show Elevation Profile",
     lbl_elev_map_sync: "Sync Map with Profile",
     lbl_show_crosshair: "Show Crosshair",
+    btn_share_map: "🔗 Share Map View",
+    status_link_copied: "Link copied to clipboard.",
+    status_clipboard_error: "Could not copy link.",
 };

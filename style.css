@@ -300,6 +300,20 @@ button {
     background-color: #546E7A;
 }
 
+.share-btn {
+    background-color: #1976D2;
+    color: white;
+    padding: 10px;
+    font-size: 13px;
+    width: 100%;
+    margin-top: 5px;
+    transition: all 0.3s ease;
+}
+
+.share-btn:hover {
+    background-color: #1565C0;
+}
+
 .gpx-track-info {
     background: #f5f5f5;
     border-radius: 8px;

@@ -47,6 +47,8 @@ const LANG_SV = {
     tutorial_routes_text: "Ladda en GPX-fil för att visa ett spår på kartan. Anpassa spårfärg, bredd och växla avståndsmarkeringar, lutningsfärgning, vägpunkter, min/max höjdmarkörer och en interaktiv höjdprofil. Aktivera kartsynk för att centrera kartan på din position när du drar längs profilen.",
     tutorial_search_title: "Sök & Position",
     tutorial_search_text: "Sök efter valfri plats med namn eller koordinater. Använd GPS-knappen för att hoppa till din position.",
+    tutorial_share_title: "Dela kartvy",
+    tutorial_share_text: "Använd den här knappen för att kopiera en länk med aktuell zoom, centrum och kartlager så andra öppnar samma kartvy.",
     tutorial_tips_title: "💡 Tips",
     tutorial_tips_text: "• Ladda en GPX-fil för att se ditt spår med avståndsmarkeringar och höjdstatistik.\n• Använd lutningsfärgning för att visualisera uppförs- och nedförsbackar.\n• Rotera kartan genom att hålla Ctrl och dra, eller använd tvåfingerrotation på pekskärm. Tryck på kompassikonen för att återställa norr.\n• I höjdprofilen kan du använda ← → piltangenterna för att gå längs spåret (håll Shift för större steg). Tryck Escape för att avsluta.",
     tutorial_btn_next: "Nästa",
@@ -77,5 +79,8 @@ const LANG_SV = {
     elevation_profile: "Höjdprofil",
     lbl_show_elev_profile: "Visa höjdprofil",
     lbl_elev_map_sync: "Synka karta med profil",
-    lbl_show_crosshair: "Visa h\u00e5rkors",
+    lbl_show_crosshair: "Visa hårkors",
+    btn_share_map: "🔗 Dela kartvy",
+    status_link_copied: "Länk kopierad till urklipp.",
+    status_clipboard_error: "Kunde inte kopiera länk.",
 };

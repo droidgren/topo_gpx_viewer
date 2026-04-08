@@ -19,6 +19,7 @@ A lightweight, browser-based tool for viewing and exploring GPX routes on topogr
 - **Location search** — Search by place name or coordinates
 - **Geolocation** — Jump to your current GPS position with a live position marker
 - **Center crosshair** — Toggle a map-center crosshair on/off from settings
+- **Share map view** — Copy a link containing zoom, center, and selected map layer
 - **PWA** — Install as an app on mobile or desktop
 - **Bilingual** — English and Swedish
 
@@ -41,11 +42,21 @@ A lightweight, browser-based tool for viewing and exploring GPX routes on topogr
 - Toggle distance markers, slope coloring, waypoints, and min/max elevation markers
 - View track statistics: length, elevation gain/loss, min/max elevation
 
+### Share Map View
+- Click **🔗 Share Map View** to copy a URL with your current map state
+- Shared links use hash format: `#map=zoom/lat/lng/layer`
+- Opening a shared link restores the same map zoom, center, and layer
+
 ### Search
 - Type a place name or coordinates (e.g. `59.33, 18.07`) in the search box
 - Click the GPS button to center on your current location
 
 ## Changelog
+
+### v0.3
+- Added a **Share Map View** button to copy map-state links
+- Added map-state restore from URL hash using `#map=zoom/lat/lng/layer`
+- Added a dedicated tutorial spotlight step for Share Map View
 
 ### v0.21
 - Added a toggleable center crosshair setting

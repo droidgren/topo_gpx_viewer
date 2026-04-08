@@ -1,7 +1,7 @@
 // ==========================================
 // 1. CONFIGURATION & CONSTANTS
 // ==========================================
-const APP_VERSION = "0.21";
+const APP_VERSION = "0.3";
 
 // Base64 flags
 const FLAG_SE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxMCI+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjEwIiBmaWxsPSIjMDA2YWE3Ii8+PHJlY3QgeD0iNSIgd2lkdGg9IjIiIGhlaWdodD0iMTAiIGZpbGw9IiNmZWNjMDAiLz48cmVjdCB5PSI0IiB3aWR0aD0iMTYiIGhlaWdodD0iMiIgZmlsbD0iI2ZlY2MwMCIvPjwvc3ZnPg==";
@@ -205,6 +205,7 @@ function updateLanguage() {
         if (document.getElementById('section-routes-title')) document.getElementById('section-routes-title').textContent = t.section_routes_title;
         if (document.getElementById('gpx-btn')) document.getElementById('gpx-btn').textContent = t.btn_gpx;
         if (document.getElementById('gpx-clear-btn')) document.getElementById('gpx-clear-btn').textContent = t.btn_gpx_clear;
+        if (document.getElementById('share-map-btn')) document.getElementById('share-map-btn').textContent = t.btn_share_map;
         if (document.getElementById('lbl-track-color')) document.getElementById('lbl-track-color').textContent = t.lbl_track_color;
         if (document.getElementById('lbl-track-width')) document.getElementById('lbl-track-width').textContent = t.lbl_track_width;
         if (document.getElementById('lbl-km-labels')) document.getElementById('lbl-km-labels').textContent = t.lbl_km_labels;
@@ -441,6 +442,26 @@ window.clearGpxRoute = function () {
     if (infoDiv) { infoDiv.style.display = 'none'; infoDiv.innerHTML = ''; }
     hideElevationProfile();
     statusDiv.textContent = translations[currentLang].status_gpx_cleared;
+};
+
+window.generateShareLink = function () {
+    const t = translations[currentLang];
+    const center = map.getCenter();
+    const zoom = Math.round(map.getZoom());
+    const lat = center.lat.toFixed(5);
+    const lng = center.lng.toFixed(5);
+    const currentLayerKey = localStorage.getItem('gpxv_layer') || 'opentopo';
+    const hash = '#map=' + zoom + '/' + lat + '/' + lng + '/' + currentLayerKey;
+    const link = location.origin + location.pathname + hash;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(() => {
+            statusDiv.textContent = t.status_link_copied || 'Link copied to clipboard.';
+        }).catch(() => {
+            statusDiv.textContent = t.status_clipboard_error || 'Could not copy link.';
+        });
+    } else {
+        statusDiv.textContent = t.status_clipboard_error || 'Could not copy link.';
+    }
 };
 
 function getGpxTrackColor() {
@@ -996,7 +1017,8 @@ const tutorialSteps = [
     { targetSelector: '.toggle-btn', titleKey: 'tutorial_minimize_title', textKey: 'tutorial_minimize_text' },
     { targetSelector: '#layerSelect', titleKey: 'tutorial_layers_title', textKey: 'tutorial_layers_text' },
     { targetSelector: '.search-group', titleKey: 'tutorial_search_title', textKey: 'tutorial_search_text' },
-    { targetSelector: '#routes-section', titleKey: 'tutorial_routes_title', textKey: 'tutorial_routes_text' },
+    { targetSelector: '#section-routes-title', targetSelectorEnd: '#gpx-btn', titleKey: 'tutorial_routes_title', textKey: 'tutorial_routes_text' },
+    { targetSelector: '#share-map-btn', titleKey: 'tutorial_share_title', textKey: 'tutorial_share_text' },
     { targetSelector: null, titleKey: 'tutorial_tips_title', textKey: 'tutorial_tips_text' }
 ];
 
@@ -1041,9 +1063,27 @@ function renderTutorialStep() {
 
     const PAD = 8;
     if (step.targetSelector) {
-        const el = document.querySelector(step.targetSelector);
-        if (el) {
-            const rect = el.getBoundingClientRect();
+        const startEl = document.querySelector(step.targetSelector);
+        if (startEl) {
+            let rect = startEl.getBoundingClientRect();
+            if (step.targetSelectorEnd) {
+                const endEl = document.querySelector(step.targetSelectorEnd);
+                if (endEl) {
+                    const endRect = endEl.getBoundingClientRect();
+                    const left = Math.min(rect.left, endRect.left);
+                    const top = Math.min(rect.top, endRect.top);
+                    const right = Math.max(rect.right, endRect.right);
+                    const bottom = Math.max(rect.bottom, endRect.bottom);
+                    rect = {
+                        left,
+                        top,
+                        right,
+                        bottom,
+                        width: right - left,
+                        height: bottom - top
+                    };
+                }
+            }
             spotlight.style.display = 'block';
             spotlight.style.left = (rect.left - PAD) + 'px';
             spotlight.style.top = (rect.top - PAD) + 'px';
@@ -1595,6 +1635,31 @@ if (savedUnit) {
 }
 handleLayerChange(savedLayer);
 updateUI();
+
+// URL hash parameters
+// URL hash: #map=zoom/lat/lng/layer
+(function handleHashParams() {
+    const hash = location.hash.replace(/^#/, '');
+    if (!hash) return;
+    const match = hash.match(/^map=(.+)/);
+    if (!match) return;
+    const parts = match[1].split('/');
+    if (parts.length < 3) return;
+    const zoom = parseInt(parts[0]);
+    const lat = parseFloat(parts[1]);
+    const lng = parseFloat(parts[2]);
+    const layer = parts[3] || null;
+    if (!isNaN(zoom) && !isNaN(lat) && !isNaN(lng)
+        && zoom >= 1 && zoom <= 20
+        && lat >= -90 && lat <= 90
+        && lng >= -180 && lng <= 180) {
+        map.setView([lat, lng], zoom);
+        if (layer && layers[layer]) {
+            handleLayerChange(layer);
+            if (layerSelect) layerSelect.value = layer;
+        }
+    }
+})();
 
 // Crosshair toggle
 (function () {

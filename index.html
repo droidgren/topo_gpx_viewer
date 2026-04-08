@@ -33,7 +33,7 @@
                     target="_blank">droidgren.github.io</a></p>
 
             <p style="font-size: 12px; color: #666; margin-top: 5px; margin-bottom: 0;">
-                <span id="lbl-version">Version</span>: <span id="app-version">0.21</span>
+                <span id="lbl-version">Version</span>: <span id="app-version">0.3</span>
             </p>
 
             <details
@@ -41,6 +41,7 @@
                 <summary style="font-weight: 700; color: #333; cursor: pointer; outline: none;"
                     id="info-changelog-title">Changelog</summary>
                 <ul style="padding-left: 20px; margin: 8px 0 0 0; line-height: 1.5;">
+                    <li><strong>v0.3:</strong> Added Share Map View links and map-state restore from URL hash (<code>#map=zoom/lat/lng/layer</code>). Added a dedicated tutorial spotlight step for sharing.</li>
                     <li><strong>v0.21:</strong> Added toggleable center crosshair and live GPS position marker with continuous updates.</li>
                     <li><strong>v0.2:</strong> Elevation profile bar with interactive cursor tracking. Toggle elevation profile on/off.</li>
                     <li><strong>v0.1:</strong> Initial release. GPX route viewer with topographic maps, track styling, distance labels, slope coloring, waypoints, and elevation stats.</li>
@@ -171,6 +172,7 @@
                 <button id="gpx-btn" class="gpx-btn" onclick="document.getElementById('gpx-file-input').click()">📂 Load GPX Route</button>
                 <div id="gpx-track-info" class="gpx-track-info" style="display:none;"></div>
                 <button id="gpx-clear-btn" class="gpx-clear-btn" onclick="clearGpxRoute()" style="display:none;">✕ Clear Route</button>
+                <button id="share-map-btn" class="share-btn" onclick="generateShareLink()">🔗 Share Map View</button>
             </div>
         </div>
 
