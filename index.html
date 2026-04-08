@@ -33,7 +33,7 @@
                     target="_blank">droidgren.github.io</a></p>
 
             <p style="font-size: 12px; color: #666; margin-top: 5px; margin-bottom: 0;">
-                <span id="lbl-version">Version</span>: <span id="app-version">0.21</span>
+                <span id="lbl-version">Version</span>: <span id="app-version">0.30</span>
             </p>
 
             <details
@@ -41,6 +41,7 @@
                 <summary style="font-weight: 700; color: #333; cursor: pointer; outline: none;"
                     id="info-changelog-title">Changelog</summary>
                 <ul style="padding-left: 20px; margin: 8px 0 0 0; line-height: 1.5;">
+                    <li><strong>v0.30:</strong> Added GPX edit mode with anchor-based routing or straight-line editing, waypoint editing, GPX name/activity editing, elevation refresh for edited geometry, and GPX export.</li>
                     <li><strong>v0.21:</strong> Added toggleable center crosshair and live GPS position marker with continuous updates.</li>
                     <li><strong>v0.2:</strong> Elevation profile bar with interactive cursor tracking. Toggle elevation profile on/off.</li>
                     <li><strong>v0.1:</strong> Initial release. GPX route viewer with topographic maps, track styling, distance labels, slope coloring, waypoints, and elevation stats.</li>
@@ -67,6 +68,18 @@
             <div class="modal-btns">
                 <button id="modal-save" class="save-btn" onclick="saveApiKey()">Save</button>
                 <button id="modal-cancel" class="cancel-btn" onclick="cancelApiKey()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="waypoint-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h4 id="waypoint-modal-title">Edit Waypoint</h4>
+            <input type="text" id="waypoint-name-input" placeholder="Waypoint name">
+            <div class="modal-btns waypoint-modal-btns">
+                <button id="waypoint-save-btn" class="save-btn" type="button">Save</button>
+                <button id="waypoint-delete-btn" class="delete-btn" type="button">Delete</button>
+                <button id="waypoint-cancel-btn" class="cancel-btn" type="button">Cancel</button>
             </div>
         </div>
     </div>
@@ -122,6 +135,36 @@
                 <div style="font-size: 14px; font-weight: 700; color: #333; margin-bottom: 6px;">
                     <span id="section-routes-title">📂 Add Routes</span>
                 </div>
+                <div class="route-action-grid">
+                    <button id="gpx-btn" class="gpx-btn" type="button">📂 Load GPX Route</button>
+                    <button id="gpx-new-btn" class="secondary-btn" type="button">✏ New Route</button>
+                </div>
+                <div class="route-action-grid compact-grid">
+                    <button id="gpx-edit-btn" class="secondary-btn" type="button">✏ Edit Route</button>
+                    <button id="gpx-export-btn" class="secondary-btn" type="button" disabled>⬇ Export GPX</button>
+                </div>
+                <div id="gpx-editor-panel" class="editor-panel" style="display:none;">
+                    <div class="control-row control-row-stack">
+                        <label id="lbl-route-name" class="control-label" for="gpxNameInput">Name:</label>
+                        <input type="text" id="gpxNameInput" class="editor-input" autocomplete="off">
+                    </div>
+                    <div class="control-row control-row-stack">
+                        <label id="lbl-route-activity" class="control-label" for="gpxActivityInput">Activity:</label>
+                        <input type="text" id="gpxActivityInput" class="editor-input" autocomplete="off">
+                    </div>
+                    <div id="gpx-segment-row" class="control-row control-row-stack" style="display:none;">
+                        <label id="lbl-route-segment" class="control-label" for="gpxSegmentSelect">Segment:</label>
+                        <select id="gpxSegmentSelect" class="editor-select"></select>
+                    </div>
+                    <div class="checkbox-group route-editor-checkbox">
+                        <div class="checkbox-row">
+                            <input type="checkbox" id="gpxRoutingEnabled" checked>
+                            <label id="lbl-routing-enabled" for="gpxRoutingEnabled">Use road routing</label>
+                        </div>
+                        <button id="gpx-add-waypoint-btn" class="inline-action-btn" type="button">Add Waypoint</button>
+                    </div>
+                    <div id="gpx-editor-help" class="editor-help"></div>
+                </div>
                 <div class="control-row">
                     <span id="lbl-track-color" class="control-label">Track Color:</span>
                     <input type="color" id="gpxTrackColor" value="#000000" style="width:36px;height:28px;border:1px solid #ccc;border-radius:4px;cursor:pointer;padding:1px;">
@@ -168,7 +211,6 @@
                     </div>
                 </div>
                 <input type="file" id="gpx-file-input" accept=".gpx" style="display:none;">
-                <button id="gpx-btn" class="gpx-btn" onclick="document.getElementById('gpx-file-input').click()">📂 Load GPX Route</button>
                 <div id="gpx-track-info" class="gpx-track-info" style="display:none;"></div>
                 <button id="gpx-clear-btn" class="gpx-clear-btn" onclick="clearGpxRoute()" style="display:none;">✕ Clear Route</button>
             </div>
