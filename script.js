@@ -1,7 +1,7 @@
 // ==========================================
 // 1. CONFIGURATION & CONSTANTS
 // ==========================================
-const APP_VERSION = "0.21";
+const APP_VERSION = "0.30";
 
 // Base64 flags
 const FLAG_SE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxMCI+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjEwIiBmaWxsPSIjMDA2YWE3Ii8+PHJlY3QgeD0iNSIgd2lkdGg9IjIiIGhlaWdodD0iMTAiIGZpbGw9IiNmZWNjMDAiLz48cmVjdCB5PSI0IiB3aWR0aD0iMTYiIGhlaWdodD0iMiIgZmlsbD0iI2ZlY2MwMCIvPjwvc3ZnPg==";
@@ -28,6 +28,18 @@ const OPENTOPO_URL = "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png";
 const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const SATELLITE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 const WORKER_URL = "https://lm.clackspark.workers.dev";
+const ROUTING_SERVICE_URL = "https://router.project-osrm.org/route/v1";
+const ROUTING_PROFILE = "foot";
+const ELEVATION_SERVICE_URL = "https://api.opentopodata.org/v1/srtm90m";
+const ELEVATION_BATCH_SIZE = 80;
+const EDIT_SIMPLIFY_LEVELS = [
+    { minZoom: 0, toleranceMeters: 2200 },
+    { minZoom: 10, toleranceMeters: 900 },
+    { minZoom: 12, toleranceMeters: 300 },
+    { minZoom: 14, toleranceMeters: 120 },
+    { minZoom: 16, toleranceMeters: 40 },
+    { minZoom: 17, toleranceMeters: 14 }
+];
 
 // ==========================================
 // 2. DOM ELEMENTS
@@ -75,6 +87,8 @@ let deferredInstallPrompt = null;
 let gpsMarker = null;
 let gpsWatchId = null;
 let isElevationCursorActive = false;
+let editorIdCounter = 1;
+let editorState = createEmptyEditorState();
 
 // Load saved position
 const savedLat = parseFloat(localStorage.getItem('gpxv_lat')) || 67.89;
@@ -204,13 +218,20 @@ function updateLanguage() {
 
         if (document.getElementById('section-routes-title')) document.getElementById('section-routes-title').textContent = t.section_routes_title;
         if (document.getElementById('gpx-btn')) document.getElementById('gpx-btn').textContent = t.btn_gpx;
+        if (document.getElementById('gpx-new-btn')) document.getElementById('gpx-new-btn').textContent = t.btn_gpx_new;
         if (document.getElementById('gpx-clear-btn')) document.getElementById('gpx-clear-btn').textContent = t.btn_gpx_clear;
+        if (document.getElementById('gpx-export-btn')) document.getElementById('gpx-export-btn').textContent = t.btn_gpx_export;
         if (document.getElementById('lbl-track-color')) document.getElementById('lbl-track-color').textContent = t.lbl_track_color;
         if (document.getElementById('lbl-track-width')) document.getElementById('lbl-track-width').textContent = t.lbl_track_width;
         if (document.getElementById('lbl-km-labels')) document.getElementById('lbl-km-labels').textContent = t.lbl_km_labels;
         if (document.getElementById('lbl-color-slope')) document.getElementById('lbl-color-slope').textContent = t.lbl_color_slope;
         if (document.getElementById('lbl-show-waypoints')) document.getElementById('lbl-show-waypoints').textContent = t.lbl_show_waypoints;
         if (document.getElementById('lbl-show-minmax')) document.getElementById('lbl-show-minmax').textContent = t.lbl_show_minmax;
+        if (document.getElementById('lbl-route-name')) document.getElementById('lbl-route-name').textContent = t.lbl_route_name;
+        if (document.getElementById('lbl-route-activity')) document.getElementById('lbl-route-activity').textContent = t.lbl_route_activity;
+        if (document.getElementById('lbl-route-segment')) document.getElementById('lbl-route-segment').textContent = t.lbl_route_segment;
+        if (document.getElementById('lbl-routing-enabled')) document.getElementById('lbl-routing-enabled').textContent = t.lbl_routing_enabled;
+        if (document.getElementById('gpx-add-waypoint-btn')) document.getElementById('gpx-add-waypoint-btn').textContent = t.btn_add_waypoint;
         if (document.getElementById('opt-unit-km')) document.getElementById('opt-unit-km').textContent = t.unit_km;
         if (document.getElementById('opt-unit-mi')) document.getElementById('opt-unit-mi').textContent = t.unit_mi;
         updateGpxTrackInfo();
@@ -253,6 +274,19 @@ function updateLanguage() {
         if (lblElevMapSync) lblElevMapSync.textContent = t.lbl_elev_map_sync;
         const lblCrosshair = document.getElementById('lbl-show-crosshair');
         if (lblCrosshair) lblCrosshair.textContent = t.lbl_show_crosshair;
+
+        const waypointModalTitle = document.getElementById('waypoint-modal-title');
+        if (waypointModalTitle) waypointModalTitle.textContent = t.modal_waypoint_title;
+        const waypointNameInput = document.getElementById('waypoint-name-input');
+        if (waypointNameInput) waypointNameInput.placeholder = t.input_waypoint_name_ph;
+        const waypointSaveBtn = document.getElementById('waypoint-save-btn');
+        if (waypointSaveBtn) waypointSaveBtn.textContent = t.btn_save;
+        const waypointDeleteBtn = document.getElementById('waypoint-delete-btn');
+        if (waypointDeleteBtn) waypointDeleteBtn.textContent = t.btn_delete;
+        const waypointCancelBtn = document.getElementById('waypoint-cancel-btn');
+        if (waypointCancelBtn) waypointCancelBtn.textContent = t.btn_cancel;
+
+        syncEditorUI();
     }
 }
 
@@ -432,14 +466,316 @@ function locateUser() {
     );
 }
 
+function createEmptyEditorDocument() {
+    return {
+        name: '',
+        activity: '',
+        segments: [],
+        waypoints: []
+    };
+}
+
+function createEmptyEditorState() {
+    return {
+        isEditing: false,
+        routingEnabled: localStorage.getItem('gpxv_routing') !== 'false',
+        routeProfile: ROUTING_PROFILE,
+        activeSegmentIndex: 0,
+        addWaypointArmed: false,
+        doc: createEmptyEditorDocument(),
+        pending: {
+            controller: null,
+            token: 0
+        },
+        insertionHandle: null,
+        insertionHideTimer: null,
+        waypointModalIndex: null
+    };
+}
+
+function generateEditorId(prefix) {
+    return `${prefix}-${editorIdCounter++}`;
+}
+
+function createEmptySegment() {
+    return {
+        id: generateEditorId('segment'),
+        anchors: [],
+        links: [],
+        geometry: []
+    };
+}
+
+function copyPoint(point) {
+    return {
+        lat: point.lat,
+        lon: point.lon,
+        ele: point.ele ?? null
+    };
+}
+
+function pointFromAnchor(anchor) {
+    return {
+        lat: anchor.lat,
+        lon: anchor.lon,
+        ele: anchor.ele ?? null
+    };
+}
+
+function createAnchor(point, options = {}) {
+    return {
+        id: generateEditorId('anchor'),
+        lat: point.lat,
+        lon: point.lon,
+        ele: point.ele ?? null,
+        minZoom: options.minZoom ?? 0,
+        userAdded: Boolean(options.userAdded),
+        sourceIndex: Number.isInteger(options.sourceIndex) ? options.sourceIndex : null
+    };
+}
+
+function createWaypoint(point) {
+    return {
+        id: generateEditorId('waypoint'),
+        lat: point.lat,
+        lon: point.lon,
+        ele: point.ele ?? null,
+        name: point.name || ''
+    };
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escapeXml(value) {
+    return escapeHtml(value);
+}
+
+function sanitizeFileName(name) {
+    const sanitized = String(name || 'route').replace(/[<>:"/\\|?*]+/g, '-').trim();
+    return sanitized || 'route';
+}
+
+function hasEditorDocument() {
+    return Boolean(
+        editorState.doc.segments.length ||
+        editorState.doc.waypoints.length ||
+        editorState.doc.name.trim() ||
+        editorState.doc.activity.trim()
+    );
+}
+
+function cancelPendingGeometryOperation() {
+    if (editorState.pending.controller) {
+        editorState.pending.controller.abort();
+    }
+    editorState.pending.controller = null;
+    editorState.pending.token = 0;
+}
+
+function getActiveSegment() {
+    if (!editorState.doc.segments.length) return null;
+    if (editorState.activeSegmentIndex < 0 || editorState.activeSegmentIndex >= editorState.doc.segments.length) {
+        editorState.activeSegmentIndex = 0;
+    }
+    return editorState.doc.segments[editorState.activeSegmentIndex] || null;
+}
+
+function projectPointToMeters(point, referenceLat) {
+    const scaleX = Math.cos(referenceLat * Math.PI / 180) * 111320;
+    return {
+        x: point.lon * scaleX,
+        y: point.lat * 110540
+    };
+}
+
+function pointToSegmentDistanceMeters(point, start, end) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    if (dx === 0 && dy === 0) {
+        const px = point.x - start.x;
+        const py = point.y - start.y;
+        return Math.sqrt(px * px + py * py);
+    }
+    const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy)));
+    const projX = start.x + t * dx;
+    const projY = start.y + t * dy;
+    const diffX = point.x - projX;
+    const diffY = point.y - projY;
+    return Math.sqrt(diffX * diffX + diffY * diffY);
+}
+
+function simplifyGeometryIndices(points, toleranceMeters) {
+    if (points.length <= 2) {
+        return points.map((_, index) => index);
+    }
+
+    const referenceLat = points.reduce((sum, point) => sum + point.lat, 0) / points.length;
+    const projected = points.map((point) => projectPointToMeters(point, referenceLat));
+    const keep = new Set([0, points.length - 1]);
+
+    function recurse(startIndex, endIndex) {
+        let maxDistance = 0;
+        let maxIndex = -1;
+
+        for (let index = startIndex + 1; index < endIndex; index++) {
+            const distance = pointToSegmentDistanceMeters(projected[index], projected[startIndex], projected[endIndex]);
+            if (distance > maxDistance) {
+                maxDistance = distance;
+                maxIndex = index;
+            }
+        }
+
+        if (maxIndex !== -1 && maxDistance > toleranceMeters) {
+            keep.add(maxIndex);
+            recurse(startIndex, maxIndex);
+            recurse(maxIndex, endIndex);
+        }
+    }
+
+    recurse(0, points.length - 1);
+    return Array.from(keep).sort((left, right) => left - right);
+}
+
+function buildAnchorsFromGeometry(points) {
+    if (!points.length) return [];
+    if (points.length === 1) {
+        return [createAnchor(points[0], { minZoom: 0, sourceIndex: 0 })];
+    }
+
+    const indexToMinZoom = new Map();
+    indexToMinZoom.set(0, 0);
+    indexToMinZoom.set(points.length - 1, 0);
+
+    EDIT_SIMPLIFY_LEVELS.forEach((level) => {
+        const indices = simplifyGeometryIndices(points, level.toleranceMeters);
+        indices.forEach((index) => {
+            const previous = indexToMinZoom.get(index);
+            if (previous === undefined || level.minZoom < previous) {
+                indexToMinZoom.set(index, level.minZoom);
+            }
+        });
+    });
+
+    return Array.from(indexToMinZoom.entries())
+        .sort((left, right) => left[0] - right[0])
+        .map(([index, minZoom]) => createAnchor(points[index], {
+            minZoom,
+            sourceIndex: index
+        }));
+}
+
+function ensureLinkEndpoints(points, startAnchor, endAnchor) {
+    const nextPoints = (points && points.length ? points : [pointFromAnchor(startAnchor), pointFromAnchor(endAnchor)]).map(copyPoint);
+    if (!nextPoints.length) {
+        nextPoints.push(pointFromAnchor(startAnchor), pointFromAnchor(endAnchor));
+    }
+    nextPoints[0] = pointFromAnchor(startAnchor);
+    if (nextPoints.length === 1) {
+        nextPoints.push(pointFromAnchor(endAnchor));
+    } else {
+        nextPoints[nextPoints.length - 1] = pointFromAnchor(endAnchor);
+    }
+    return nextPoints;
+}
+
+function buildImportedLinksFromGeometry(points, anchors) {
+    if (anchors.length < 2) return [];
+    const links = [];
+    for (let index = 0; index < anchors.length - 1; index++) {
+        const startAnchor = anchors[index];
+        const endAnchor = anchors[index + 1];
+        const startIndex = Number.isInteger(startAnchor.sourceIndex) ? startAnchor.sourceIndex : 0;
+        const endIndex = Number.isInteger(endAnchor.sourceIndex) ? endAnchor.sourceIndex : startIndex + 1;
+        const slice = points.slice(startIndex, endIndex + 1).map(copyPoint);
+        links.push({
+            id: generateEditorId('link'),
+            mode: 'imported',
+            points: ensureLinkEndpoints(slice, startAnchor, endAnchor)
+        });
+    }
+    return links;
+}
+
+function rebuildSegmentGeometry(segment) {
+    if (!segment) return [];
+    if (!segment.links.length) {
+        segment.geometry = segment.anchors.length ? [pointFromAnchor(segment.anchors[0])] : [];
+        return segment.geometry;
+    }
+
+    const geometry = [];
+    segment.links.forEach((link, index) => {
+        const startAnchor = segment.anchors[index];
+        const endAnchor = segment.anchors[index + 1];
+        const points = ensureLinkEndpoints(link.points, startAnchor, endAnchor);
+        if (!geometry.length) {
+            geometry.push(...points);
+        } else {
+            geometry.push(...points.slice(1));
+        }
+    });
+    segment.geometry = geometry;
+    return geometry;
+}
+
+function refreshSegmentAnchorElevations(segment) {
+    if (!segment) return;
+    segment.anchors.forEach((anchor, index) => {
+        const values = [];
+        if (index > 0) {
+            const previousLink = segment.links[index - 1];
+            const previousPoint = previousLink && previousLink.points[previousLink.points.length - 1];
+            if (previousPoint && previousPoint.ele !== null) values.push(previousPoint.ele);
+        }
+        if (index < segment.links.length) {
+            const nextLink = segment.links[index];
+            const nextPoint = nextLink && nextLink.points[0];
+            if (nextPoint && nextPoint.ele !== null) values.push(nextPoint.ele);
+        }
+        if (values.length) {
+            anchor.ele = values.reduce((sum, value) => sum + value, 0) / values.length;
+        }
+    });
+}
+
+function createEditableSegment(points) {
+    const normalizedPoints = points.map(copyPoint);
+    const anchors = buildAnchorsFromGeometry(normalizedPoints);
+    const segment = createEmptySegment();
+    segment.anchors = anchors;
+    segment.links = buildImportedLinksFromGeometry(normalizedPoints, anchors);
+    segment.geometry = normalizedPoints.length ? normalizedPoints : rebuildSegmentGeometry(segment);
+    return segment;
+}
+
+function createEditorDocumentFromParsedData(parsedData) {
+    const doc = createEmptyEditorDocument();
+    doc.name = parsedData.name || '';
+    doc.activity = parsedData.activity || '';
+    doc.segments = parsedData.segments.map((segment) => createEditableSegment(segment));
+    doc.waypoints = parsedData.waypoints.map((waypoint) => createWaypoint(waypoint));
+    return doc;
+}
+
 window.clearGpxRoute = function () {
+    cancelPendingGeometryOperation();
     if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
     gpxTrackData = null;
+    editorState = createEmptyEditorState();
     const clearBtn = document.getElementById('gpx-clear-btn');
     if (clearBtn) clearBtn.style.display = 'none';
     const infoDiv = document.getElementById('gpx-track-info');
     if (infoDiv) { infoDiv.style.display = 'none'; infoDiv.innerHTML = ''; }
+    closeWaypointModal();
     hideElevationProfile();
+    syncEditorUI();
     statusDiv.textContent = translations[currentLang].status_gpx_cleared;
 };
 
@@ -498,9 +834,698 @@ function computeTrackStats(allSegments) {
     };
 }
 
+function countEditorPoints(doc) {
+    let count = 0;
+    doc.segments.forEach((segment) => {
+        count += segment.geometry.length;
+    });
+    count += doc.waypoints.length;
+    return count;
+}
+
+function syncTrackDataFromEditor(options = {}) {
+    const denseSegments = editorState.doc.segments
+        .map((segment) => rebuildSegmentGeometry(segment).map(copyPoint))
+        .filter((segment) => segment.length > 0);
+
+    if (!denseSegments.length && !editorState.doc.waypoints.length) {
+        gpxTrackData = null;
+        hideElevationProfile();
+    } else {
+        const stats = computeTrackStats(denseSegments);
+        gpxTrackData = {
+            name: editorState.doc.name,
+            activity: editorState.doc.activity,
+            segments: denseSegments,
+            waypoints: editorState.doc.waypoints.map((waypoint) => ({
+                lat: waypoint.lat,
+                lon: waypoint.lon,
+                ele: waypoint.ele ?? null,
+                name: waypoint.name || ''
+            })),
+            ...stats
+        };
+
+        if (getGpxShowElevProfile() && denseSegments.some((segment) => segment.length > 1)) {
+            showElevationProfile();
+        } else {
+            hideElevationProfile();
+        }
+    }
+
+    updateGpxTrackInfo();
+    syncEditorUI();
+    if (options.redraw !== false) {
+        rebuildGpxLayer();
+    }
+}
+
+function getVisibleAnchorIndices(segment) {
+    if (!segment || !editorState.isEditing) return [];
+    const zoom = map.getZoom();
+    const indices = [];
+    segment.anchors.forEach((anchor, index) => {
+        const isEndpoint = index === 0 || index === segment.anchors.length - 1;
+        if (anchor.userAdded || isEndpoint || zoom >= anchor.minZoom) {
+            indices.push(index);
+        }
+    });
+    if (!indices.length && segment.anchors.length) {
+        indices.push(0);
+    }
+    return indices;
+}
+
+function getMidpointAlongGeometry(points) {
+    if (!points || !points.length) return null;
+    if (points.length === 1) {
+        return L.latLng(points[0].lat, points[0].lon);
+    }
+
+    let totalDistance = 0;
+    for (let index = 1; index < points.length; index++) {
+        totalDistance += haversineDistance(points[index - 1].lat, points[index - 1].lon, points[index].lat, points[index].lon);
+    }
+    const targetDistance = totalDistance / 2;
+
+    let accumulated = 0;
+    for (let index = 1; index < points.length; index++) {
+        const start = points[index - 1];
+        const end = points[index];
+        const stepDistance = haversineDistance(start.lat, start.lon, end.lat, end.lon);
+        if (accumulated + stepDistance >= targetDistance) {
+            const fraction = stepDistance === 0 ? 0 : (targetDistance - accumulated) / stepDistance;
+            return L.latLng(
+                start.lat + (end.lat - start.lat) * fraction,
+                start.lon + (end.lon - start.lon) * fraction
+            );
+        }
+        accumulated += stepDistance;
+    }
+
+    const lastPoint = points[points.length - 1];
+    return L.latLng(lastPoint.lat, lastPoint.lon);
+}
+
+function beginGeometryOperation(statusText) {
+    cancelPendingGeometryOperation();
+    const controller = new AbortController();
+    const token = generateEditorId('op');
+    editorState.pending.controller = controller;
+    editorState.pending.token = token;
+    if (statusText) {
+        statusDiv.textContent = statusText;
+    }
+    return { signal: controller.signal, token };
+}
+
+function finishGeometryOperation(token, statusText) {
+    if (editorState.pending.token !== token) return;
+    editorState.pending.controller = null;
+    editorState.pending.token = 0;
+    if (statusText) {
+        statusDiv.textContent = statusText;
+    }
+}
+
+function clearInsertionHideTimer() {
+    if (editorState.insertionHideTimer) {
+        window.clearTimeout(editorState.insertionHideTimer);
+        editorState.insertionHideTimer = null;
+    }
+}
+
+function hideInsertionHandle(options = {}) {
+    clearInsertionHideTimer();
+    if (!editorState.insertionHandle) return;
+    editorState.insertionHandle = null;
+    if (options.redraw !== false) {
+        rebuildGpxLayer();
+    }
+}
+
+function scheduleHideInsertionHandle() {
+    clearInsertionHideTimer();
+    editorState.insertionHideTimer = window.setTimeout(() => {
+        hideInsertionHandle();
+    }, 120);
+}
+
+function showInsertionHandle(segmentIndex, linkIndex) {
+    if (!editorState.isEditing || editorState.addWaypointArmed) return;
+    const segment = editorState.doc.segments[segmentIndex];
+    if (!segment || linkIndex < 0 || linkIndex >= segment.links.length) return;
+    const latlng = getMidpointAlongGeometry(segment.links[linkIndex].points);
+    if (!latlng) return;
+    clearInsertionHideTimer();
+
+    if (
+        editorState.insertionHandle &&
+        editorState.insertionHandle.segmentIndex === segmentIndex &&
+        editorState.insertionHandle.linkIndex === linkIndex
+    ) {
+        return;
+    }
+
+    editorState.insertionHandle = {
+        segmentIndex,
+        linkIndex,
+        latlng
+    };
+    rebuildGpxLayer();
+}
+
+function buildStraightLinePoints(startAnchor, endAnchor) {
+    const distance = haversineDistance(startAnchor.lat, startAnchor.lon, endAnchor.lat, endAnchor.lon);
+    const steps = Math.max(1, Math.min(24, Math.round(distance / 120)));
+    const points = [];
+    for (let index = 0; index <= steps; index++) {
+        const fraction = steps === 0 ? 0 : index / steps;
+        points.push({
+            lat: startAnchor.lat + (endAnchor.lat - startAnchor.lat) * fraction,
+            lon: startAnchor.lon + (endAnchor.lon - startAnchor.lon) * fraction,
+            ele: null
+        });
+    }
+    return points;
+}
+
+function dedupeConsecutivePoints(points) {
+    const deduped = [];
+    points.forEach((point) => {
+        const previous = deduped[deduped.length - 1];
+        if (!previous || previous.lat !== point.lat || previous.lon !== point.lon) {
+            deduped.push(point);
+        }
+    });
+    return deduped;
+}
+
+async function fetchRouteGeometryPoints(startAnchor, endAnchor, signal) {
+    const straightLine = buildStraightLinePoints(startAnchor, endAnchor);
+    try {
+        const url = `${ROUTING_SERVICE_URL}/${editorState.routeProfile}/${startAnchor.lon},${startAnchor.lat};${endAnchor.lon},${endAnchor.lat}?overview=full&geometries=geojson&steps=false`;
+        const response = await fetch(url, { signal });
+        if (!response.ok) {
+            throw new Error(`Routing request failed: ${response.status}`);
+        }
+        const data = await response.json();
+        const coordinates = data.routes && data.routes[0] && data.routes[0].geometry && data.routes[0].geometry.coordinates;
+        if (!coordinates || coordinates.length < 2) {
+            throw new Error('No route geometry returned');
+        }
+        return {
+            points: dedupeConsecutivePoints(coordinates.map(([lon, lat]) => ({ lat, lon, ele: null }))),
+            fallbackUsed: false
+        };
+    } catch (error) {
+        if (error.name === 'AbortError') throw error;
+        console.error(error);
+        return {
+            points: straightLine,
+            fallbackUsed: true
+        };
+    }
+}
+
+async function fetchElevationForPoints(points, signal) {
+    const elevatedPoints = points.map(copyPoint);
+    let failed = false;
+
+    for (let offset = 0; offset < elevatedPoints.length; offset += ELEVATION_BATCH_SIZE) {
+        const batch = elevatedPoints.slice(offset, offset + ELEVATION_BATCH_SIZE);
+        const locations = batch.map((point) => `${point.lat},${point.lon}`).join('|');
+        try {
+            const response = await fetch(`${ELEVATION_SERVICE_URL}?locations=${encodeURIComponent(locations)}`, { signal });
+            if (!response.ok) {
+                throw new Error(`Elevation request failed: ${response.status}`);
+            }
+            const data = await response.json();
+            const results = data.results || [];
+            batch.forEach((point, index) => {
+                const result = results[index];
+                point.ele = result && typeof result.elevation === 'number' ? result.elevation : null;
+            });
+        } catch (error) {
+            if (error.name === 'AbortError') throw error;
+            console.error(error);
+            failed = true;
+            batch.forEach((point) => {
+                point.ele = point.ele ?? null;
+            });
+        }
+    }
+
+    return {
+        points: elevatedPoints,
+        failed
+    };
+}
+
+async function buildLinkPoints(startAnchor, endAnchor, signal) {
+    const routeResult = editorState.routingEnabled
+        ? await fetchRouteGeometryPoints(startAnchor, endAnchor, signal)
+        : { points: buildStraightLinePoints(startAnchor, endAnchor), fallbackUsed: false };
+    const pointsWithEndpoints = ensureLinkEndpoints(routeResult.points, startAnchor, endAnchor);
+    const elevationResult = await fetchElevationForPoints(pointsWithEndpoints, signal);
+    return {
+        points: ensureLinkEndpoints(elevationResult.points, startAnchor, endAnchor),
+        fallbackUsed: routeResult.fallbackUsed,
+        elevationFailed: elevationResult.failed
+    };
+}
+
+async function recalcSegmentLinks(segment, linkIndices, statusText) {
+    if (!segment) return;
+    const t = translations[currentLang];
+    const uniqueIndices = Array.from(new Set(linkIndices.filter((index) => index >= 0 && index < segment.links.length)));
+    if (!uniqueIndices.length) {
+        rebuildSegmentGeometry(segment);
+        refreshSegmentAnchorElevations(segment);
+        syncTrackDataFromEditor();
+        return;
+    }
+
+    const operation = beginGeometryOperation(statusText || t.status_route_rebuilding);
+    let fallbackUsed = false;
+    let elevationFailed = false;
+
+    try {
+        for (const linkIndex of uniqueIndices) {
+            const startAnchor = segment.anchors[linkIndex];
+            const endAnchor = segment.anchors[linkIndex + 1];
+            if (!startAnchor || !endAnchor) continue;
+            const result = await buildLinkPoints(startAnchor, endAnchor, operation.signal);
+            segment.links[linkIndex] = {
+                id: segment.links[linkIndex] && segment.links[linkIndex].id ? segment.links[linkIndex].id : generateEditorId('link'),
+                mode: editorState.routingEnabled ? 'routed' : 'straight',
+                points: result.points
+            };
+            fallbackUsed = fallbackUsed || result.fallbackUsed;
+            elevationFailed = elevationFailed || result.elevationFailed;
+        }
+
+        rebuildSegmentGeometry(segment);
+        refreshSegmentAnchorElevations(segment);
+        syncTrackDataFromEditor();
+
+        if (fallbackUsed) {
+            finishGeometryOperation(operation.token, t.status_route_fallback);
+        } else if (elevationFailed) {
+            finishGeometryOperation(operation.token, t.status_elevation_warning);
+        } else {
+            finishGeometryOperation(operation.token, t.status_route_updated);
+        }
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            return;
+        }
+        console.error(error);
+        finishGeometryOperation(operation.token, t.status_route_error);
+        syncTrackDataFromEditor();
+    }
+}
+
+async function rebuildActiveSegmentAllLinks() {
+    const segment = getActiveSegment();
+    if (!segment || segment.links.length === 0) return;
+    await recalcSegmentLinks(segment, segment.links.map((_, index) => index));
+}
+
+async function updateAnchorPosition(segmentIndex, anchorIndex, latlng) {
+    const segment = editorState.doc.segments[segmentIndex];
+    if (!segment || !segment.anchors[anchorIndex]) return;
+    const anchor = segment.anchors[anchorIndex];
+    anchor.lat = latlng.lat;
+    anchor.lon = latlng.lng;
+    anchor.ele = null;
+    anchor.sourceIndex = null;
+
+    if (!segment.links.length) {
+        rebuildSegmentGeometry(segment);
+        syncTrackDataFromEditor();
+        return;
+    }
+
+    const linksToUpdate = [];
+    if (anchorIndex > 0) linksToUpdate.push(anchorIndex - 1);
+    if (anchorIndex < segment.anchors.length - 1) linksToUpdate.push(anchorIndex);
+    await recalcSegmentLinks(segment, linksToUpdate);
+}
+
+async function appendAnchorToActiveSegment(latlng) {
+    const t = translations[currentLang];
+    let segment = getActiveSegment();
+    if (!segment) {
+        segment = createEmptySegment();
+        editorState.doc.segments.push(segment);
+        editorState.activeSegmentIndex = editorState.doc.segments.length - 1;
+    }
+
+    const newAnchor = createAnchor({ lat: latlng.lat, lon: latlng.lng, ele: null }, {
+        minZoom: 0,
+        userAdded: true
+    });
+    segment.anchors.push(newAnchor);
+
+    if (segment.anchors.length === 1) {
+        rebuildSegmentGeometry(segment);
+        syncTrackDataFromEditor();
+        statusDiv.textContent = t.status_anchor_added;
+        return;
+    }
+
+    const previousAnchor = segment.anchors[segment.anchors.length - 2];
+    segment.links.push({
+        id: generateEditorId('link'),
+        mode: 'pending',
+        points: [pointFromAnchor(previousAnchor), pointFromAnchor(newAnchor)]
+    });
+
+    syncTrackDataFromEditor();
+    await recalcSegmentLinks(segment, [segment.links.length - 1]);
+}
+
+async function insertAnchorAtLink(segmentIndex, linkIndex, latlng) {
+    const segment = editorState.doc.segments[segmentIndex];
+    if (!segment || linkIndex < 0 || linkIndex >= segment.links.length) return;
+
+    const newAnchor = createAnchor({ lat: latlng.lat, lon: latlng.lng, ele: null }, {
+        minZoom: 0,
+        userAdded: true
+    });
+
+    segment.anchors.splice(linkIndex + 1, 0, newAnchor);
+    segment.links.splice(
+        linkIndex,
+        1,
+        {
+            id: generateEditorId('link'),
+            mode: 'pending',
+            points: [pointFromAnchor(segment.anchors[linkIndex]), pointFromAnchor(newAnchor)]
+        },
+        {
+            id: generateEditorId('link'),
+            mode: 'pending',
+            points: [pointFromAnchor(newAnchor), pointFromAnchor(segment.anchors[linkIndex + 2])]
+        }
+    );
+
+    hideInsertionHandle({ redraw: false });
+    syncTrackDataFromEditor();
+    await recalcSegmentLinks(segment, [linkIndex, linkIndex + 1]);
+}
+
+function updateEditorMetadataFromInputs() {
+    const nameInput = document.getElementById('gpxNameInput');
+    const activityInput = document.getElementById('gpxActivityInput');
+    if (!nameInput || !activityInput) return;
+    editorState.doc.name = nameInput.value.trim();
+    editorState.doc.activity = activityInput.value.trim();
+    if (gpxTrackData) {
+        gpxTrackData.name = editorState.doc.name;
+        gpxTrackData.activity = editorState.doc.activity;
+    }
+    updateGpxTrackInfo();
+    syncEditorUI();
+}
+
+function setActiveSegmentIndex(index) {
+    const normalizedIndex = Math.max(0, Math.min(editorState.doc.segments.length - 1, Number(index) || 0));
+    editorState.activeSegmentIndex = normalizedIndex;
+    hideInsertionHandle({ redraw: false });
+    syncEditorUI();
+    rebuildGpxLayer();
+}
+
+function startEditMode(createIfMissing = false) {
+    const t = translations[currentLang];
+    if (!hasEditorDocument() && createIfMissing) {
+        editorState.doc.segments = [createEmptySegment()];
+    }
+    if (!hasEditorDocument() && !editorState.doc.segments.length) {
+        editorState.doc.segments = [createEmptySegment()];
+    }
+    editorState.isEditing = true;
+    editorState.addWaypointArmed = false;
+    syncEditorUI();
+    rebuildGpxLayer();
+    statusDiv.textContent = t.status_edit_mode_on;
+}
+
+function stopEditMode() {
+    const t = translations[currentLang];
+    editorState.isEditing = false;
+    editorState.addWaypointArmed = false;
+    hideInsertionHandle({ redraw: false });
+    closeWaypointModal();
+    syncEditorUI();
+    rebuildGpxLayer();
+    statusDiv.textContent = t.status_edit_mode_off;
+}
+
+function toggleEditMode() {
+    if (editorState.isEditing) {
+        stopEditMode();
+    } else {
+        startEditMode(false);
+    }
+}
+
+function createNewRoute() {
+    const t = translations[currentLang];
+    if (hasEditorDocument() && !window.confirm(t.confirm_new_route)) {
+        return;
+    }
+    cancelPendingGeometryOperation();
+    editorState = createEmptyEditorState();
+    editorState.isEditing = true;
+    editorState.doc.segments = [createEmptySegment()];
+    syncTrackDataFromEditor();
+    statusDiv.textContent = t.status_edit_new_route;
+}
+
+async function handleRoutingToggle(checked) {
+    editorState.routingEnabled = checked;
+    localStorage.setItem('gpxv_routing', checked ? 'true' : 'false');
+    syncEditorUI();
+    const segment = getActiveSegment();
+    if (editorState.isEditing && segment && segment.links.length) {
+        await rebuildActiveSegmentAllLinks();
+    } else {
+        rebuildGpxLayer();
+    }
+}
+
+function toggleWaypointPlacement() {
+    if (!editorState.isEditing) return;
+    const t = translations[currentLang];
+    editorState.addWaypointArmed = !editorState.addWaypointArmed;
+    if (editorState.addWaypointArmed) {
+        hideInsertionHandle({ redraw: false });
+        closeWaypointModal();
+        statusDiv.textContent = t.status_waypoint_arm;
+    } else {
+        statusDiv.textContent = t.status_edit_mode_on;
+    }
+    syncEditorUI();
+    rebuildGpxLayer();
+}
+
+function openWaypointModal(index) {
+    const waypoint = editorState.doc.waypoints[index];
+    const modal = document.getElementById('waypoint-modal');
+    const input = document.getElementById('waypoint-name-input');
+    if (!waypoint || !modal || !input) return;
+    editorState.waypointModalIndex = index;
+    input.value = waypoint.name || '';
+    modal.style.display = 'flex';
+    input.focus();
+    input.select();
+}
+
+function closeWaypointModal() {
+    const modal = document.getElementById('waypoint-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    editorState.waypointModalIndex = null;
+}
+
+function saveWaypointModal() {
+    const t = translations[currentLang];
+    const input = document.getElementById('waypoint-name-input');
+    const index = editorState.waypointModalIndex;
+    if (!input || index === null || !editorState.doc.waypoints[index]) return;
+    editorState.doc.waypoints[index].name = input.value.trim();
+    closeWaypointModal();
+    syncTrackDataFromEditor();
+    statusDiv.textContent = t.status_waypoint_saved;
+}
+
+function deleteWaypointFromModal() {
+    const t = translations[currentLang];
+    const index = editorState.waypointModalIndex;
+    if (index === null || !editorState.doc.waypoints[index]) return;
+    editorState.doc.waypoints.splice(index, 1);
+    closeWaypointModal();
+    syncTrackDataFromEditor();
+    statusDiv.textContent = t.status_waypoint_deleted;
+}
+
+function addWaypointAtLatLng(latlng) {
+    const t = translations[currentLang];
+    const waypoint = createWaypoint({ lat: latlng.lat, lon: latlng.lng, ele: null, name: '' });
+    editorState.doc.waypoints.push(waypoint);
+    editorState.addWaypointArmed = false;
+    syncTrackDataFromEditor();
+    openWaypointModal(editorState.doc.waypoints.length - 1);
+    statusDiv.textContent = t.status_waypoint_created;
+}
+
+function syncEditorUI() {
+    const t = translations[currentLang];
+    const hasDoc = hasEditorDocument() || editorState.isEditing;
+    const exportable = Boolean(gpxTrackData && (gpxTrackData.segments.length || gpxTrackData.waypoints.length));
+
+    const editorPanel = document.getElementById('gpx-editor-panel');
+    if (editorPanel) editorPanel.style.display = hasDoc ? 'block' : 'none';
+
+    const editBtn = document.getElementById('gpx-edit-btn');
+    if (editBtn) {
+        editBtn.textContent = editorState.isEditing ? t.btn_gpx_done : t.btn_gpx_edit;
+        editBtn.disabled = !hasDoc && !editorState.isEditing;
+    }
+
+    const exportBtn = document.getElementById('gpx-export-btn');
+    if (exportBtn) exportBtn.disabled = !exportable;
+
+    const clearBtn = document.getElementById('gpx-clear-btn');
+    if (clearBtn) clearBtn.style.display = hasDoc ? 'block' : 'none';
+
+    const nameInput = document.getElementById('gpxNameInput');
+    if (nameInput) {
+        nameInput.disabled = !hasDoc;
+        if (nameInput.value !== editorState.doc.name) nameInput.value = editorState.doc.name;
+    }
+
+    const activityInput = document.getElementById('gpxActivityInput');
+    if (activityInput) {
+        activityInput.disabled = !hasDoc;
+        if (activityInput.value !== editorState.doc.activity) activityInput.value = editorState.doc.activity;
+    }
+
+    const routingCheckbox = document.getElementById('gpxRoutingEnabled');
+    if (routingCheckbox) {
+        routingCheckbox.checked = editorState.routingEnabled;
+        routingCheckbox.disabled = !editorState.isEditing;
+    }
+
+    const addWaypointBtn = document.getElementById('gpx-add-waypoint-btn');
+    if (addWaypointBtn) {
+        addWaypointBtn.disabled = !editorState.isEditing;
+        addWaypointBtn.classList.toggle('active', editorState.addWaypointArmed);
+    }
+
+    const segmentRow = document.getElementById('gpx-segment-row');
+    const segmentSelect = document.getElementById('gpxSegmentSelect');
+    if (segmentRow && segmentSelect) {
+        if (editorState.doc.segments.length > 1) {
+            segmentRow.style.display = 'block';
+            segmentSelect.innerHTML = '';
+            editorState.doc.segments.forEach((_, index) => {
+                const option = document.createElement('option');
+                option.value = String(index);
+                option.textContent = t.gpx_segment_label.replace('{n}', index + 1);
+                if (index === editorState.activeSegmentIndex) option.selected = true;
+                segmentSelect.appendChild(option);
+            });
+            segmentSelect.disabled = !editorState.isEditing;
+        } else {
+            segmentRow.style.display = 'none';
+            segmentSelect.innerHTML = '';
+        }
+    }
+
+    const help = document.getElementById('gpx-editor-help');
+    if (help) {
+        if (!editorState.isEditing) {
+            help.textContent = hasDoc ? t.editor_help_idle : '';
+        } else if (editorState.addWaypointArmed) {
+            help.textContent = t.editor_help_waypoint;
+        } else if (editorState.routingEnabled) {
+            help.textContent = t.editor_help_routing;
+        } else {
+            help.textContent = t.editor_help_straight;
+        }
+    }
+}
+
+function exportCurrentGpx() {
+    const t = translations[currentLang];
+    if (!hasEditorDocument()) {
+        statusDiv.textContent = t.status_export_empty;
+        return;
+    }
+
+    const lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        `<gpx version="1.1" creator="Topo GPX Viewer v${APP_VERSION}" xmlns="http://www.topografix.com/GPX/1/1">`
+    ];
+
+    if (editorState.doc.name) {
+        lines.push('  <metadata>');
+        lines.push(`    <name>${escapeXml(editorState.doc.name)}</name>`);
+        lines.push('  </metadata>');
+    }
+
+    editorState.doc.waypoints.forEach((waypoint) => {
+        lines.push(`  <wpt lat="${waypoint.lat}" lon="${waypoint.lon}">`);
+        if (waypoint.ele !== null) lines.push(`    <ele>${waypoint.ele}</ele>`);
+        if (waypoint.name) lines.push(`    <name>${escapeXml(waypoint.name)}</name>`);
+        lines.push('  </wpt>');
+    });
+
+    if (editorState.doc.segments.length) {
+        lines.push('  <trk>');
+        if (editorState.doc.name) lines.push(`    <name>${escapeXml(editorState.doc.name)}</name>`);
+        if (editorState.doc.activity) lines.push(`    <type>${escapeXml(editorState.doc.activity)}</type>`);
+        editorState.doc.segments.forEach((segment) => {
+            const geometry = rebuildSegmentGeometry(segment);
+            if (!geometry.length) return;
+            lines.push('    <trkseg>');
+            geometry.forEach((point) => {
+                lines.push(`      <trkpt lat="${point.lat}" lon="${point.lon}">`);
+                if (point.ele !== null) lines.push(`        <ele>${point.ele}</ele>`);
+                lines.push('      </trkpt>');
+            });
+            lines.push('    </trkseg>');
+        });
+        lines.push('  </trk>');
+    }
+
+    lines.push('</gpx>');
+
+    const blob = new Blob([lines.join('\n')], { type: 'application/gpx+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${sanitizeFileName(editorState.doc.name || 'route')}.gpx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    statusDiv.textContent = t.status_export_done;
+}
+
 function updateGpxTrackInfo() {
     const infoDiv = document.getElementById('gpx-track-info');
-    if (!infoDiv || !gpxTrackData) return;
+    if (!infoDiv) return;
+    if (!gpxTrackData) {
+        infoDiv.style.display = 'none';
+        infoDiv.innerHTML = '';
+        return;
+    }
     const t = translations[currentLang];
     const d = gpxTrackData;
     const unit = getDistanceUnit();
@@ -511,16 +1536,23 @@ function updateGpxTrackInfo() {
     } else {
         lengthStr = d.length >= 1000 ? (d.length / 1000).toFixed(2) + ' km' : Math.round(d.length) + ' m';
     }
-    let html = `<span>${t.gpx_info_length}:</span> ${lengthStr}`;
+    const lines = [];
+    if (d.name) {
+        lines.push(`<span>${t.gpx_info_name}:</span> ${escapeHtml(d.name)}`);
+    }
+    if (d.activity) {
+        lines.push(`<span>${t.gpx_info_activity}:</span> ${escapeHtml(d.activity)}`);
+    }
+    lines.push(`<span>${t.gpx_info_length}:</span> ${lengthStr}`);
     if (d.gain > 0 || d.loss > 0) {
-        html += `<br><span>${t.gpx_info_gain}:</span> +${Math.round(d.gain)} m`;
-        html += `<br><span>${t.gpx_info_loss}:</span> -${Math.round(d.loss)} m`;
+        lines.push(`<span>${t.gpx_info_gain}:</span> +${Math.round(d.gain)} m`);
+        lines.push(`<span>${t.gpx_info_loss}:</span> -${Math.round(d.loss)} m`);
     }
     if (d.minElev !== null) {
-        html += `<br><span>${t.gpx_info_min_elev}:</span> ${Math.round(d.minElev)} m`;
-        html += `<br><span>${t.gpx_info_max_elev}:</span> ${Math.round(d.maxElev)} m`;
+        lines.push(`<span>${t.gpx_info_min_elev}:</span> ${Math.round(d.minElev)} m`);
+        lines.push(`<span>${t.gpx_info_max_elev}:</span> ${Math.round(d.maxElev)} m`);
     }
-    infoDiv.innerHTML = html;
+    infoDiv.innerHTML = lines.join('<br>');
     infoDiv.style.display = 'block';
 }
 
@@ -692,74 +1724,212 @@ function getGpxShowMinMax() {
     return el ? el.checked : true;
 }
 
+function createAnchorIcon(isEndpoint, isActive) {
+    const classes = ['gpx-anchor-icon'];
+    if (isEndpoint) classes.push('endpoint');
+    if (isActive) classes.push('active');
+    return L.divIcon({
+        className: 'gpx-anchor-marker',
+        html: `<span class="${classes.join(' ')}"></span>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+    });
+}
+
+function createInsertHandleIcon() {
+    return L.divIcon({
+        className: 'gpx-insert-marker',
+        html: '<span class="gpx-insert-icon"></span>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11]
+    });
+}
+
+function createWaypointIcon(waypoint, editing) {
+    const label = escapeHtml(waypoint.name || 'POI');
+    const extraClass = editing ? ' is-editing' : '';
+    return L.divIcon({
+        className: 'gpx-waypoint-editor-marker',
+        html: `<span class="gpx-waypoint-editor${extraClass}"><span class="gpx-waypoint-dot"></span><span>${label}</span></span>`,
+        iconSize: null,
+        iconAnchor: [10, 10]
+    });
+}
+
 function rebuildGpxLayer() {
-    if (!gpxTrackData) return;
+    if (!gpxTrackData && !editorState.isEditing) {
+        if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
+        return;
+    }
     if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
 
     const color = getGpxTrackColor();
     const weight = getGpxTrackWidth();
     const showKm = getGpxShowKmLabels();
     const colorBySlope = getGpxColorBySlope();
-    const showWaypoints = getGpxShowWaypoints();
+    const showWaypoints = editorState.isEditing ? true : getGpxShowWaypoints();
     const showMinMax = getGpxShowMinMax();
     const mapLayers = [];
     const t = translations[currentLang];
 
-    for (const seg of gpxTrackData.segments) {
-        if (seg.length < 2) continue;
-        if (colorBySlope) {
-            mapLayers.push(...buildSlopeColoredTrack(seg, weight, color));
-        } else {
-            const coords = seg.map(p => [p.lat, p.lon]);
-            mapLayers.push(L.polyline(coords, { color, weight, opacity: 0.85 }));
+    if (gpxTrackData) {
+        for (const seg of gpxTrackData.segments) {
+            if (seg.length < 2) continue;
+            if (colorBySlope) {
+                mapLayers.push(...buildSlopeColoredTrack(seg, weight, color));
+            } else {
+                const coords = seg.map(p => [p.lat, p.lon]);
+                mapLayers.push(L.polyline(coords, { color, weight, opacity: 0.85 }));
+            }
         }
-    }
 
-    if (showWaypoints) {
-        for (const wp of gpxTrackData.waypoints) {
-            const label = wp.name || '•';
-            const icon = L.divIcon({ className: 'gpx-waypoint-label', html: label, iconSize: null });
-            mapLayers.push(L.marker([wp.lat, wp.lon], { icon, interactive: false }));
+        if (showWaypoints) {
+            const sourceWaypoints = editorState.isEditing ? editorState.doc.waypoints : gpxTrackData.waypoints;
+            sourceWaypoints.forEach((wp, waypointIndex) => {
+                const icon = editorState.isEditing
+                    ? createWaypointIcon(wp, true)
+                    : L.divIcon({ className: 'gpx-waypoint-label', html: escapeHtml(wp.name || 'POI'), iconSize: null });
+                const marker = L.marker([wp.lat, wp.lon], {
+                    icon,
+                    interactive: editorState.isEditing,
+                    draggable: editorState.isEditing,
+                    autoPan: editorState.isEditing,
+                    bubblingMouseEvents: false
+                });
+
+                if (editorState.isEditing) {
+                    marker.on('dragstart', () => {
+                        map.dragging.disable();
+                        hideInsertionHandle({ redraw: false });
+                    });
+                    marker.on('dragend', (event) => {
+                        const latlng = event.target.getLatLng();
+                        wp.lat = latlng.lat;
+                        wp.lon = latlng.lng;
+                        map.dragging.enable();
+                        syncTrackDataFromEditor();
+                        statusDiv.textContent = t.status_waypoint_saved;
+                    });
+                    marker.on('click', (event) => {
+                        if (event.originalEvent) L.DomEvent.stop(event.originalEvent);
+                        openWaypointModal(waypointIndex);
+                    });
+                }
+
+                mapLayers.push(marker);
+            });
         }
-    }
 
-    // Start / End markers
-    const { startPt, endPt } = getTrackEndpoints(gpxTrackData.segments);
-    const OVERLAP_THRESHOLD = 50;
-    const startEndOverlap = startPt && endPt &&
-        haversineDistance(startPt.lat, startPt.lon, endPt.lat, endPt.lon) < OVERLAP_THRESHOLD;
+        const { startPt, endPt } = getTrackEndpoints(gpxTrackData.segments);
+        const OVERLAP_THRESHOLD = 50;
+        const startEndOverlap = startPt && endPt &&
+            haversineDistance(startPt.lat, startPt.lon, endPt.lat, endPt.lon) < OVERLAP_THRESHOLD;
 
-    if (startEndOverlap) {
-        const label = `⏵ ${t.gpx_start || 'Start'} / ${t.gpx_end || 'End'}`;
-        const icon = L.divIcon({ className: 'gpx-start-end-label', html: label, iconSize: null });
-        mapLayers.push(L.marker([startPt.lat, startPt.lon], { icon, interactive: false }));
-    } else {
-        if (startPt) {
-            const icon = L.divIcon({ className: 'gpx-start-end-label', html: `▶ ${t.gpx_start || 'Start'}`, iconSize: null });
+        if (startEndOverlap) {
+            const label = `⏵ ${t.gpx_start || 'Start'} / ${t.gpx_end || 'End'}`;
+            const icon = L.divIcon({ className: 'gpx-start-end-label', html: label, iconSize: null });
             mapLayers.push(L.marker([startPt.lat, startPt.lon], { icon, interactive: false }));
+        } else {
+            if (startPt) {
+                const icon = L.divIcon({ className: 'gpx-start-end-label', html: `▶ ${t.gpx_start || 'Start'}`, iconSize: null });
+                mapLayers.push(L.marker([startPt.lat, startPt.lon], { icon, interactive: false }));
+            }
+            if (endPt) {
+                const icon = L.divIcon({ className: 'gpx-start-end-label', html: `⏹ ${t.gpx_end || 'End'}`, iconSize: null });
+                mapLayers.push(L.marker([endPt.lat, endPt.lon], { icon, interactive: false }));
+            }
         }
-        if (endPt) {
-            const icon = L.divIcon({ className: 'gpx-start-end-label', html: `⏹ ${t.gpx_end || 'End'}`, iconSize: null });
-            mapLayers.push(L.marker([endPt.lat, endPt.lon], { icon, interactive: false }));
+
+        if (showMinMax) {
+            const { minPt, maxPt } = findMinMaxElevPoints(gpxTrackData.segments);
+            if (maxPt) {
+                const icon = L.divIcon({ className: 'gpx-elev-label', html: `▲ ${Math.round(maxPt.ele)} m`, iconSize: null });
+                mapLayers.push(L.marker([maxPt.lat, maxPt.lon], { icon, interactive: false }));
+            }
+            if (minPt) {
+                const icon = L.divIcon({ className: 'gpx-elev-label min-elev', html: `▼ ${Math.round(minPt.ele)} m`, iconSize: null });
+                mapLayers.push(L.marker([minPt.lat, minPt.lon], { icon, interactive: false }));
+            }
+        }
+
+        if (showKm) {
+            const kmLabels = buildKmLabels(gpxTrackData.segments);
+            mapLayers.push(...kmLabels);
         }
     }
 
-    // Min / Max elevation labels
-    if (showMinMax) {
-        const { minPt, maxPt } = findMinMaxElevPoints(gpxTrackData.segments);
-        if (maxPt) {
-            const icon = L.divIcon({ className: 'gpx-elev-label', html: `▲ ${Math.round(maxPt.ele)} m`, iconSize: null });
-            mapLayers.push(L.marker([maxPt.lat, maxPt.lon], { icon, interactive: false }));
-        }
-        if (minPt) {
-            const icon = L.divIcon({ className: 'gpx-elev-label min-elev', html: `▼ ${Math.round(minPt.ele)} m`, iconSize: null });
-            mapLayers.push(L.marker([minPt.lat, minPt.lon], { icon, interactive: false }));
-        }
-    }
+    if (editorState.isEditing) {
+        const activeSegment = getActiveSegment();
+        if (activeSegment) {
+            activeSegment.links.forEach((link, linkIndex) => {
+                const hitCoords = link.points.map((point) => [point.lat, point.lon]);
+                const hitLine = L.polyline(hitCoords, {
+                    color: '#000000',
+                    weight: 20,
+                    opacity: 0,
+                    interactive: true,
+                    bubblingMouseEvents: false
+                });
 
-    if (showKm) {
-        const kmLabels = buildKmLabels(gpxTrackData.segments);
-        mapLayers.push(...kmLabels);
+                hitLine.on('mouseover', () => showInsertionHandle(editorState.activeSegmentIndex, linkIndex));
+                hitLine.on('mouseout', () => scheduleHideInsertionHandle());
+                hitLine.on('click', (event) => {
+                    if (event.originalEvent) L.DomEvent.stop(event.originalEvent);
+                    if (L.Browser.touch || 'ontouchstart' in window) {
+                        insertAnchorAtLink(editorState.activeSegmentIndex, linkIndex, event.latlng);
+                    }
+                });
+                mapLayers.push(hitLine);
+            });
+
+            getVisibleAnchorIndices(activeSegment).forEach((anchorIndex) => {
+                const anchor = activeSegment.anchors[anchorIndex];
+                const isEndpoint = anchorIndex === 0 || anchorIndex === activeSegment.anchors.length - 1;
+                const marker = L.marker([anchor.lat, anchor.lon], {
+                    icon: createAnchorIcon(isEndpoint, true),
+                    draggable: true,
+                    autoPan: true,
+                    bubblingMouseEvents: false
+                });
+
+                marker.on('dragstart', () => {
+                    map.dragging.disable();
+                    hideInsertionHandle({ redraw: false });
+                });
+                marker.on('dragend', async (event) => {
+                    map.dragging.enable();
+                    await updateAnchorPosition(editorState.activeSegmentIndex, anchorIndex, event.target.getLatLng());
+                });
+                marker.on('click', (event) => {
+                    if (event.originalEvent) L.DomEvent.stop(event.originalEvent);
+                });
+                mapLayers.push(marker);
+            });
+
+            if (editorState.insertionHandle && editorState.insertionHandle.segmentIndex === editorState.activeSegmentIndex) {
+                const handleMarker = L.marker(editorState.insertionHandle.latlng, {
+                    icon: createInsertHandleIcon(),
+                    draggable: true,
+                    autoPan: true,
+                    bubblingMouseEvents: false
+                });
+
+                handleMarker.on('mouseover', () => clearInsertionHideTimer());
+                handleMarker.on('mouseout', () => scheduleHideInsertionHandle());
+                handleMarker.on('dragstart', () => {
+                    clearInsertionHideTimer();
+                    map.dragging.disable();
+                });
+                handleMarker.on('dragend', async (event) => {
+                    map.dragging.enable();
+                    const handle = editorState.insertionHandle;
+                    if (!handle) return;
+                    await insertAnchorAtLink(handle.segmentIndex, handle.linkIndex, event.target.getLatLng());
+                });
+
+                mapLayers.push(handleMarker);
+            }
+        }
     }
 
     if (mapLayers.length > 0) {
@@ -767,103 +1937,200 @@ function rebuildGpxLayer() {
     }
 }
 
+function getDirectChildText(parent, tagName) {
+    if (!parent) return '';
+    const match = Array.from(parent.children).find((child) => child.tagName && child.tagName.toLowerCase() === tagName.toLowerCase());
+    return match ? match.textContent.trim() : '';
+}
+
+function parseGpxPoint(node) {
+    const lat = parseFloat(node.getAttribute('lat'));
+    const lon = parseFloat(node.getAttribute('lon'));
+    const eleText = getDirectChildText(node, 'ele');
+    const ele = eleText ? parseFloat(eleText) : null;
+    if (Number.isNaN(lat) || Number.isNaN(lon)) return null;
+    return {
+        lat,
+        lon,
+        ele: Number.isNaN(ele) ? null : ele
+    };
+}
+
+function parseGpxDocument(doc) {
+    const parsed = {
+        name: getDirectChildText(doc.querySelector('metadata'), 'name'),
+        activity: '',
+        segments: [],
+        waypoints: [],
+        totalPoints: 0
+    };
+
+    doc.querySelectorAll('trk').forEach((track) => {
+        if (!parsed.name) parsed.name = getDirectChildText(track, 'name');
+        if (!parsed.activity) parsed.activity = getDirectChildText(track, 'type');
+        track.querySelectorAll('trkseg').forEach((segmentNode) => {
+            const points = Array.from(segmentNode.querySelectorAll('trkpt'))
+                .map(parseGpxPoint)
+                .filter(Boolean);
+            if (points.length) {
+                parsed.segments.push(points);
+                parsed.totalPoints += points.length;
+            }
+        });
+    });
+
+    doc.querySelectorAll('rte').forEach((route) => {
+        if (!parsed.name) parsed.name = getDirectChildText(route, 'name');
+        if (!parsed.activity) parsed.activity = getDirectChildText(route, 'type');
+        const points = Array.from(route.querySelectorAll('rtept'))
+            .map(parseGpxPoint)
+            .filter(Boolean);
+        if (points.length) {
+            parsed.segments.push(points);
+            parsed.totalPoints += points.length;
+        }
+    });
+
+    doc.querySelectorAll('wpt').forEach((waypointNode) => {
+        const point = parseGpxPoint(waypointNode);
+        if (!point) return;
+        point.name = getDirectChildText(waypointNode, 'name');
+        parsed.waypoints.push(point);
+        parsed.totalPoints++;
+    });
+
+    return parsed;
+}
+
+function fitMapToEditorDocument() {
+    const allCoords = [];
+    editorState.doc.segments.forEach((segment) => {
+        rebuildSegmentGeometry(segment).forEach((point) => {
+            allCoords.push([point.lat, point.lon]);
+        });
+    });
+    editorState.doc.waypoints.forEach((waypoint) => {
+        allCoords.push([waypoint.lat, waypoint.lon]);
+    });
+
+    if (!allCoords.length) return;
+    const bounds = L.latLngBounds(allCoords);
+    if (bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.1));
+    }
+}
+
+function loadEditorDocument(doc, statusText) {
+    cancelPendingGeometryOperation();
+    closeWaypointModal();
+    editorState.doc = doc;
+    editorState.activeSegmentIndex = 0;
+    editorState.isEditing = false;
+    editorState.addWaypointArmed = false;
+    hideInsertionHandle({ redraw: false });
+    syncTrackDataFromEditor();
+    fitMapToEditorDocument();
+    if (statusText) {
+        statusDiv.textContent = statusText;
+    }
+}
+
+function loadGpxText(text) {
+    const t = translations[currentLang];
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, 'application/xml');
+        if (doc.querySelector('parsererror')) {
+            statusDiv.textContent = t.status_gpx_error;
+            return;
+        }
+
+        const parsed = parseGpxDocument(doc);
+        if (!parsed.segments.length && !parsed.waypoints.length) {
+            statusDiv.textContent = t.status_gpx_empty;
+            return;
+        }
+
+        const editorDoc = createEditorDocumentFromParsedData(parsed);
+        loadEditorDocument(editorDoc, t.status_gpx_loaded.replace('{n}', parsed.totalPoints));
+    } catch (error) {
+        console.error(error);
+        statusDiv.textContent = t.status_gpx_error;
+    }
+}
+
 document.getElementById('gpx-file-input').addEventListener('change', function (e) {
     const file = e.target.files[0];
     if (!file) return;
-    const t = translations[currentLang];
     const reader = new FileReader();
     reader.onload = function (evt) {
-        try {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(evt.target.result, 'application/xml');
-            if (doc.querySelector('parsererror')) {
-                statusDiv.textContent = t.status_gpx_error;
-                return;
-            }
-
-            if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
-
-            const allSegments = [];
-            const waypoints = [];
-            let totalPoints = 0;
-
-            doc.querySelectorAll('trk').forEach(trk => {
-                trk.querySelectorAll('trkseg').forEach(seg => {
-                    const pts = [];
-                    seg.querySelectorAll('trkpt').forEach(pt => {
-                        const lat = parseFloat(pt.getAttribute('lat'));
-                        const lon = parseFloat(pt.getAttribute('lon'));
-                        const eleEl = pt.querySelector('ele');
-                        const ele = eleEl ? parseFloat(eleEl.textContent) : null;
-                        if (!isNaN(lat) && !isNaN(lon)) pts.push({ lat, lon, ele: isNaN(ele) ? null : ele });
-                    });
-                    if (pts.length > 0) {
-                        allSegments.push(pts);
-                        totalPoints += pts.length;
-                    }
-                });
-            });
-
-            doc.querySelectorAll('rte').forEach(rte => {
-                const pts = [];
-                rte.querySelectorAll('rtept').forEach(pt => {
-                    const lat = parseFloat(pt.getAttribute('lat'));
-                    const lon = parseFloat(pt.getAttribute('lon'));
-                    const eleEl = pt.querySelector('ele');
-                    const ele = eleEl ? parseFloat(eleEl.textContent) : null;
-                    if (!isNaN(lat) && !isNaN(lon)) pts.push({ lat, lon, ele: isNaN(ele) ? null : ele });
-                });
-                if (pts.length > 0) {
-                    allSegments.push(pts);
-                    totalPoints += pts.length;
-                }
-            });
-
-            doc.querySelectorAll('wpt').forEach(pt => {
-                const lat = parseFloat(pt.getAttribute('lat'));
-                const lon = parseFloat(pt.getAttribute('lon'));
-                if (!isNaN(lat) && !isNaN(lon)) {
-                    const nameEl = pt.querySelector('name');
-                    const name = nameEl ? nameEl.textContent : '';
-                    waypoints.push({ lat, lon, name });
-                    totalPoints++;
-                }
-            });
-
-            if (allSegments.length === 0 && waypoints.length === 0) {
-                statusDiv.textContent = t.status_gpx_empty;
-                return;
-            }
-
-            const stats = computeTrackStats(allSegments);
-            gpxTrackData = { segments: allSegments, waypoints, ...stats };
-
-            rebuildGpxLayer();
-            updateGpxTrackInfo();
-            showElevationProfile();
-
-            if (gpxLayer) {
-                const allCoords = [];
-                allSegments.forEach(s => s.forEach(p => allCoords.push([p.lat, p.lon])));
-                waypoints.forEach(w => allCoords.push([w.lat, w.lon]));
-                if (allCoords.length > 0) {
-                    map.fitBounds(L.latLngBounds(allCoords).pad(0.1));
-                }
-            }
-
-            const clearBtn = document.getElementById('gpx-clear-btn');
-            if (clearBtn) clearBtn.style.display = 'block';
-
-            statusDiv.textContent = t.status_gpx_loaded.replace('{n}', totalPoints);
-        } catch (err) {
-            statusDiv.textContent = t.status_gpx_error;
-        }
+        loadGpxText(evt.target.result);
     };
     reader.onerror = function () {
         statusDiv.textContent = translations[currentLang].status_gpx_error;
     };
     reader.readAsText(file);
     e.target.value = '';
+});
+
+document.getElementById('gpx-btn').addEventListener('click', function () {
+    document.getElementById('gpx-file-input').click();
+});
+
+document.getElementById('gpx-new-btn').addEventListener('click', function () {
+    createNewRoute();
+});
+
+document.getElementById('gpx-edit-btn').addEventListener('click', function () {
+    toggleEditMode();
+});
+
+document.getElementById('gpx-export-btn').addEventListener('click', function () {
+    exportCurrentGpx();
+});
+
+document.getElementById('gpxNameInput').addEventListener('input', function () {
+    updateEditorMetadataFromInputs();
+});
+
+document.getElementById('gpxActivityInput').addEventListener('input', function () {
+    updateEditorMetadataFromInputs();
+});
+
+document.getElementById('gpxRoutingEnabled').addEventListener('change', function () {
+    handleRoutingToggle(this.checked);
+});
+
+document.getElementById('gpx-add-waypoint-btn').addEventListener('click', function () {
+    toggleWaypointPlacement();
+});
+
+document.getElementById('gpxSegmentSelect').addEventListener('change', function () {
+    setActiveSegmentIndex(this.value);
+});
+
+document.getElementById('waypoint-save-btn').addEventListener('click', function () {
+    saveWaypointModal();
+});
+
+document.getElementById('waypoint-delete-btn').addEventListener('click', function () {
+    deleteWaypointFromModal();
+});
+
+document.getElementById('waypoint-cancel-btn').addEventListener('click', function () {
+    closeWaypointModal();
+});
+
+document.getElementById('waypoint-name-input').addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') {
+        saveWaypointModal();
+    }
+});
+
+document.getElementById('waypoint-modal').addEventListener('click', function (event) {
+    if (event.target === this) {
+        closeWaypointModal();
+    }
 });
 
 // Live-update track when settings change
@@ -1575,8 +2842,16 @@ map.on('moveend', () => {
     localStorage.setItem('gpxv_zoom', map.getZoom());
 });
 
-// Minimize controls on mobile when clicking the map
-map.on('click', () => {
+map.on('click', async (event) => {
+    if (editorState.isEditing) {
+        if (editorState.addWaypointArmed) {
+            addWaypointAtLatLng(event.latlng);
+            return;
+        }
+        await appendAnchorToActiveSegment(event.latlng);
+        return;
+    }
+
     if (window.innerWidth <= 600 && !isControlsMinimized) {
         toggleControls();
     }
@@ -1593,7 +2868,12 @@ if (savedUnit) {
     const unitSel = document.getElementById('distanceUnit');
     if (unitSel) unitSel.value = savedUnit;
 }
+const savedRouting = localStorage.getItem('gpxv_routing');
+if (savedRouting === 'false') {
+    editorState.routingEnabled = false;
+}
 handleLayerChange(savedLayer);
+syncEditorUI();
 updateUI();
 
 // Crosshair toggle
