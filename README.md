@@ -4,6 +4,8 @@ A lightweight, browser-based tool for viewing and exploring GPX routes on topogr
 
 🌐 **Live demo:** [https://droidgren.github.io/topo_gpx_viewer/](https://droidgren.github.io/topo_gpx_viewer/)
 
+Also check out **Elevation Finder**, a tool for checking ground elevation on the map by clicking a location or searching for a place: [Live page](https://droidgren.github.io/elevation_finder/) | [GitHub repository](https://github.com/droidgren/elevation_finder)
+
 ## Features
 
 - **Multiple map layers** — OpenTopo, Lantmäteriet, ThunderForest Outdoors, Tracetrack Topo, OSM, and Satellite (ESRI)
