@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+gpx-files/*.gpx
+gpx-files/gpx-index.json
+gpx-files/*.tmp
+!gpx-files/.gitkeep
