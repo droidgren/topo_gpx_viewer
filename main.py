@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -20,6 +20,8 @@ APP_DIR = Path(os.getenv("GPX_APP_DIR", BASE_DIR / "app"))
 UPLOAD_DIR = Path(os.getenv("GPX_UPLOAD_DIR", BASE_DIR / "gpx-files"))
 INDEX_PATH = Path(os.getenv("GPX_INDEX_PATH", UPLOAD_DIR / "gpx-index.json"))
 MAX_UPLOAD_BYTES = int(os.getenv("GPX_MAX_UPLOAD_BYTES", 10 * 1024 * 1024))
+OWNER_COOKIE_NAME = "gpxv_owner"
+OWNER_COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 5
 
 PUBLIC_ROOT_FILES = {
     "index.html",
@@ -97,6 +99,40 @@ def sanitize_filename(filename: str) -> str:
     return sanitized
 
 
+def get_owner_id_from_request(request: Request) -> str | None:
+    owner_id = request.cookies.get(OWNER_COOKIE_NAME, "").strip()
+    return owner_id or None
+
+
+def ensure_owner_id(request: Request, response: Response) -> str:
+    owner_id = get_owner_id_from_request(request)
+    if owner_id:
+        return owner_id
+
+    owner_id = secrets.token_urlsafe(18)
+    response.set_cookie(
+        key=OWNER_COOKIE_NAME,
+        value=owner_id,
+        max_age=OWNER_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
+    return owner_id
+
+
+def build_owner_filename_key(owner_id: str, filename: str) -> str:
+    return f"{owner_id}:{filename}"
+
+
+def require_owner_id(request: Request) -> str:
+    owner_id = get_owner_id_from_request(request)
+    if not owner_id:
+        raise HTTPException(status_code=403, detail="Missing owner session")
+    return owner_id
+
+
 def validate_gpx_payload(payload: bytes) -> None:
     if not payload:
         raise HTTPException(status_code=400, detail="Empty GPX file")
@@ -142,12 +178,15 @@ def on_startup() -> None:
 
 
 @app.get("/api/files")
-def list_files(request: Request) -> dict[str, list[dict[str, Any]]]:
+def list_files(request: Request, response: Response) -> dict[str, list[dict[str, Any]]]:
+    owner_id = ensure_owner_id(request, response)
     with _index_lock:
         index_payload = load_index()
 
     files: list[dict[str, Any]] = []
     for record in index_payload["files_by_id"].values():
+        if record.get("owner_id") != owner_id:
+            continue
         stored_filename = record.get("stored_filename")
         if not stored_filename:
             continue
@@ -160,7 +199,11 @@ def list_files(request: Request) -> dict[str, list[dict[str, Any]]]:
 
 
 @app.post("/api/upload")
-async def upload_file(request: Request, file: UploadFile = File(...)) -> dict[str, Any]:
+async def upload_file(
+    request: Request,
+    response: Response,
+    file: UploadFile = File(...),
+) -> dict[str, Any]:
     filename = sanitize_filename(file.filename or "")
     payload = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(payload) > MAX_UPLOAD_BYTES:
@@ -169,10 +212,12 @@ async def upload_file(request: Request, file: UploadFile = File(...)) -> dict[st
     validate_gpx_payload(payload)
     ensure_storage_dirs()
     timestamp = datetime.now(timezone.utc).isoformat()
+    owner_id = ensure_owner_id(request, response)
+    filename_key = build_owner_filename_key(owner_id, filename)
 
     with _index_lock:
         index_payload = load_index()
-        existing_id = index_payload["filename_to_id"].get(filename)
+        existing_id = index_payload["filename_to_id"].get(filename_key)
         record_id = existing_id or secrets.token_urlsafe(9)
         existing_record = index_payload["files_by_id"].get(record_id, {})
         stored_filename = existing_record.get("stored_filename") or f"{record_id}.gpx"
@@ -183,15 +228,49 @@ async def upload_file(request: Request, file: UploadFile = File(...)) -> dict[st
         record = {
             "id": record_id,
             "filename": filename,
+            "owner_id": owner_id,
             "stored_filename": stored_filename,
             "size": len(payload),
             "uploaded_at": timestamp,
         }
         index_payload["files_by_id"][record_id] = record
-        index_payload["filename_to_id"][filename] = record_id
+        index_payload["filename_to_id"][filename_key] = record_id
         save_index(index_payload)
 
     return serialize_record(record, request)
+
+
+@app.delete("/api/files/{gpx_id}")
+def delete_file(gpx_id: str, request: Request) -> dict[str, str]:
+    owner_id = require_owner_id(request)
+
+    with _index_lock:
+        index_payload = load_index()
+        record = index_payload["files_by_id"].get(gpx_id)
+        if not record or record.get("owner_id") != owner_id:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        stored_filename = record.get("stored_filename")
+        filename = record.get("filename")
+
+        del index_payload["files_by_id"][gpx_id]
+
+        owner_filename_key = build_owner_filename_key(owner_id, filename or "")
+        if filename and index_payload["filename_to_id"].get(owner_filename_key) == gpx_id:
+            del index_payload["filename_to_id"][owner_filename_key]
+        if filename and index_payload["filename_to_id"].get(filename) == gpx_id:
+            del index_payload["filename_to_id"][filename]
+
+        save_index(index_payload)
+
+    if stored_filename:
+        file_path = UPLOAD_DIR / stored_filename
+        try:
+            file_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    return {"status": "deleted", "id": gpx_id}
 
 
 @app.get("/api/files/{gpx_id}/raw", name="get_raw_file")

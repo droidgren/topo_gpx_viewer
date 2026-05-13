@@ -94,6 +94,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 h3 {
@@ -101,6 +102,8 @@ h3 {
     font-size: 18px;
     color: #333;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .toggle-btn {
@@ -140,6 +143,11 @@ h3 {
     font-weight: bold;
     font-style: italic;
     color: #555;
+}
+
+.share-circle-btn {
+    font-size: 13px;
+    color: #1565C0;
 }
 
 /* FLAG IMAGE */
@@ -209,6 +217,29 @@ h3 {
     border: 1px solid #ccc;
     border-radius: 6px;
     font-family: monospace;
+}
+
+.gpx-modal-content {
+    max-width: 520px;
+    text-align: left;
+}
+
+.gpx-modal-content h4,
+.gpx-modal-content p {
+    text-align: left;
+}
+
+.gpx-modal-actions {
+    margin: 12px 0;
+}
+
+.gpx-modal-actions .gpx-btn,
+#gpx-modal-close {
+    margin-top: 0;
+}
+
+.gpx-modal-panel {
+    margin-top: 0;
 }
 
 .modal-btns {
@@ -326,6 +357,18 @@ button {
     background-color: #CFD8DC;
 }
 
+.danger-btn {
+    background-color: #FDECEA;
+    color: #B42318;
+    padding: 7px 10px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.danger-btn:hover {
+    background-color: #FCDAD7;
+}
+
 .gpx-track-info {
     background: #f5f5f5;
     border-radius: 8px;
@@ -346,6 +389,12 @@ button {
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.72);
     border: 1px solid rgba(120, 144, 156, 0.35);
+}
+
+.gpx-modal-panel .uploaded-gpx-list {
+    max-height: 280px;
+    overflow-y: auto;
+    padding-right: 2px;
 }
 
 .uploaded-gpx-title {
@@ -405,6 +454,10 @@ button {
     flex-shrink: 0;
 }
 
+.uploaded-gpx-actions button {
+    white-space: nowrap;
+}
+
 @media (max-width: 600px) {
     .uploaded-gpx-item {
         flex-direction: column;
@@ -415,8 +468,13 @@ button {
         width: 100%;
     }
 
-    .uploaded-gpx-actions .secondary-btn {
+    .uploaded-gpx-actions .secondary-btn,
+    .uploaded-gpx-actions .danger-btn {
         flex: 1;
+    }
+
+    .header-buttons {
+        gap: 6px;
     }
 }
 

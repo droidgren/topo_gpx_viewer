@@ -80,6 +80,7 @@ let currentSharedGpxId = null;
 let currentGpxFilename = null;
 let currentGpxShareUrl = null;
 let uploadedGpxFiles = [];
+let uploadedGpxListState = 'idle';
 
 // Load saved position
 const savedLat = parseFloat(localStorage.getItem('gpxv_lat')) || 67.89;
@@ -209,10 +210,18 @@ function updateLanguage() {
 
         if (document.getElementById('section-routes-title')) document.getElementById('section-routes-title').textContent = t.section_routes_title;
         if (document.getElementById('gpx-btn')) document.getElementById('gpx-btn').textContent = t.btn_gpx;
+        if (document.getElementById('gpx-modal-title')) document.getElementById('gpx-modal-title').textContent = t.modal_gpx_title || t.btn_gpx;
+        if (document.getElementById('gpx-modal-desc')) document.getElementById('gpx-modal-desc').textContent = t.modal_gpx_desc || '';
+        if (document.getElementById('gpx-upload-btn')) document.getElementById('gpx-upload-btn').textContent = t.btn_upload_gpx || 'Upload';
+        if (document.getElementById('gpx-modal-close')) document.getElementById('gpx-modal-close').textContent = t.btn_close;
         if (document.getElementById('gpx-clear-btn')) document.getElementById('gpx-clear-btn').textContent = t.btn_gpx_clear;
-        if (document.getElementById('share-map-btn')) document.getElementById('share-map-btn').textContent = t.btn_share_map;
+        const shareMapBtn = document.getElementById('share-map-btn');
+        if (shareMapBtn) {
+            const shareLabel = t.btn_share_map_title || t.btn_share_map || 'Share Map View';
+            shareMapBtn.title = shareLabel;
+            shareMapBtn.setAttribute('aria-label', shareLabel);
+        }
         if (document.getElementById('uploaded-gpx-title')) document.getElementById('uploaded-gpx-title').textContent = t.uploaded_gpx_title;
-        if (document.getElementById('uploaded-gpx-empty')) document.getElementById('uploaded-gpx-empty').textContent = t.uploaded_gpx_empty;
         if (document.getElementById('lbl-track-color')) document.getElementById('lbl-track-color').textContent = t.lbl_track_color;
         if (document.getElementById('lbl-track-width')) document.getElementById('lbl-track-width').textContent = t.lbl_track_width;
         if (document.getElementById('lbl-km-labels')) document.getElementById('lbl-km-labels').textContent = t.lbl_km_labels;
@@ -366,6 +375,21 @@ function cancelApiKey() {
 function showInfo() { document.getElementById('info-modal').style.display = 'flex'; }
 function closeInfo() { document.getElementById('info-modal').style.display = 'none'; }
 
+function showGpxModal() {
+    const modal = document.getElementById('gpx-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    refreshUploadedFiles();
+}
+
+function closeGpxModal() {
+    const modal = document.getElementById('gpx-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+window.showGpxModal = showGpxModal;
+window.closeGpxModal = closeGpxModal;
+
 function toggleControls() {
     const btn = document.querySelector('.toggle-btn');
     isControlsMinimized = !isControlsMinimized;
@@ -470,13 +494,12 @@ function getCurrentMapHash() {
 }
 
 function getCurrentShareLink() {
-    const mapHash = getCurrentMapHash();
-    if (!currentSharedGpxId) {
-        return location.origin + location.pathname + mapHash;
+    if (currentSharedGpxId) {
+        const params = new URLSearchParams();
+        params.set('gpx', currentSharedGpxId);
+        return location.origin + location.pathname + '?' + params.toString();
     }
-    const params = new URLSearchParams(location.search);
-    params.set('gpx', currentSharedGpxId);
-    return location.origin + location.pathname + '?' + params.toString() + mapHash;
+    return location.origin + location.pathname + getCurrentMapHash();
 }
 
 function fallbackCopyTextToClipboard(text) {
@@ -550,14 +573,46 @@ window.generateShareLink = function () {
 
 window.copyUploadedGpxLink = function (gpxId) {
     const t = translations[currentLang];
-    const params = new URLSearchParams(location.search);
+    const params = new URLSearchParams();
     params.set('gpx', gpxId);
-    const link = location.origin + location.pathname + '?' + params.toString() + getCurrentMapHash();
+    const link = location.origin + location.pathname + '?' + params.toString();
     copyTextToClipboard(
         link,
         t.status_gpx_share_copied || t.status_link_copied || 'Link copied to clipboard.',
         t.status_clipboard_error || 'Could not copy link.'
     );
+};
+
+window.deleteUploadedGpx = async function (gpxId) {
+    const t = translations[currentLang];
+    if (!gpxId) return;
+
+    const fileEntry = uploadedGpxFiles.find(file => file.id === gpxId);
+    const filename = fileEntry && fileEntry.filename ? fileEntry.filename : 'GPX file';
+    const confirmMessage = (t.confirm_delete_uploaded_gpx || 'Delete "{name}"?').replace('{name}', filename);
+    if (!window.confirm(confirmMessage)) {
+        return;
+    }
+
+    statusDiv.textContent = t.status_deleting_gpx || t.status_loading || 'Loading data...';
+    try {
+        const response = await fetch(API_BASE + '/files/' + encodeURIComponent(gpxId), {
+            method: 'DELETE',
+            credentials: 'same-origin'
+        });
+        if (!response.ok) {
+            throw new Error('Failed to delete GPX');
+        }
+
+        if (currentSharedGpxId === gpxId) {
+            window.clearGpxRoute();
+        }
+
+        await refreshUploadedFiles();
+        statusDiv.textContent = (t.status_gpx_deleted || 'GPX file deleted.').replace('{name}', filename);
+    } catch (err) {
+        statusDiv.textContent = t.status_delete_gpx_error || 'Could not delete the GPX file.';
+    }
 };
 
 function getGpxTrackColor() {
@@ -1025,6 +1080,18 @@ function renderUploadedFiles() {
 
     const t = translations[currentLang];
     listEl.innerHTML = '';
+    if (uploadedGpxListState === 'loading') {
+        emptyEl.style.display = '';
+        emptyEl.textContent = t.uploaded_gpx_loading || 'Loading uploaded GPX files...';
+        return;
+    }
+
+    if (uploadedGpxListState === 'error') {
+        emptyEl.style.display = '';
+        emptyEl.textContent = t.uploaded_gpx_error || 'Could not load uploaded GPX files.';
+        return;
+    }
+
     if (!uploadedGpxFiles.length) {
         emptyEl.style.display = '';
         emptyEl.textContent = t.uploaded_gpx_empty || 'No uploaded GPX files yet.';
@@ -1061,19 +1128,22 @@ function renderUploadedFiles() {
         openBtn.type = 'button';
         openBtn.className = 'secondary-btn';
         openBtn.textContent = t.btn_open_uploaded_gpx || 'Open';
-        openBtn.addEventListener('click', () => {
-            loadSharedGpxById(fileEntry.id, { filename: fileEntry.filename });
+        openBtn.addEventListener('click', async () => {
+            const didLoad = await loadSharedGpxById(fileEntry.id, { filename: fileEntry.filename });
+            if (didLoad) {
+                closeGpxModal();
+            }
         });
         actions.appendChild(openBtn);
 
-        const shareBtn = document.createElement('button');
-        shareBtn.type = 'button';
-        shareBtn.className = 'secondary-btn';
-        shareBtn.textContent = t.btn_copy_gpx_link || 'Copy Link';
-        shareBtn.addEventListener('click', () => {
-            window.copyUploadedGpxLink(fileEntry.id);
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'danger-btn';
+        deleteBtn.textContent = t.btn_delete_uploaded_gpx || 'Delete';
+        deleteBtn.addEventListener('click', () => {
+            window.deleteUploadedGpx(fileEntry.id);
         });
-        actions.appendChild(shareBtn);
+        actions.appendChild(deleteBtn);
 
         row.appendChild(meta);
         row.appendChild(actions);
@@ -1082,17 +1152,24 @@ function renderUploadedFiles() {
 }
 
 async function refreshUploadedFiles() {
+    uploadedGpxListState = 'loading';
+    renderUploadedFiles();
     try {
-        const response = await fetch(API_BASE + '/files', { cache: 'no-store' });
+        const response = await fetch(API_BASE + '/files', {
+            cache: 'no-store',
+            credentials: 'same-origin'
+        });
         if (!response.ok) {
             throw new Error('Failed to fetch uploaded GPX files');
         }
         const payload = await response.json();
         const files = Array.isArray(payload.files) ? payload.files : [];
         uploadedGpxFiles = files.map(normalizeUploadedFileEntry).filter(fileEntry => fileEntry.id);
+        uploadedGpxListState = 'ready';
         renderUploadedFiles();
     } catch (err) {
         uploadedGpxFiles = [];
+        uploadedGpxListState = 'error';
         renderUploadedFiles();
     }
 }
@@ -1102,7 +1179,10 @@ async function loadSharedGpxById(gpxId, options = {}) {
     if (!gpxId) return;
     statusDiv.textContent = t.status_loading_shared_gpx || t.status_loading || 'Loading data...';
     try {
-        const response = await fetch(API_BASE + '/files/' + encodeURIComponent(gpxId) + '/raw', { cache: 'no-store' });
+        const response = await fetch(API_BASE + '/files/' + encodeURIComponent(gpxId) + '/raw', {
+            cache: 'no-store',
+            credentials: 'same-origin'
+        });
         if (!response.ok) {
             throw new Error('Failed to load shared GPX');
         }
@@ -1120,8 +1200,10 @@ async function loadSharedGpxById(gpxId, options = {}) {
         const params = new URLSearchParams(location.search);
         params.set('gpx', gpxId);
         history.replaceState(null, '', location.pathname + '?' + params.toString() + location.hash);
+        return true;
     } catch (err) {
         statusDiv.textContent = t.status_shared_gpx_error || t.status_gpx_error || 'Failed to load GPX file.';
+        return false;
     }
 }
 
@@ -1133,6 +1215,7 @@ async function uploadGpxFile(file) {
 
     const response = await fetch(API_BASE + '/upload', {
         method: 'POST',
+        credentials: 'same-origin',
         body: formData
     });
     if (!response.ok) {
@@ -1449,8 +1532,25 @@ function finishTutorial() {
 // ==========================================
 
 let elevationProfileData = null; // [{dist, ele, lat, lon}, ...]
-let elevationProfileMinimized = false;
+let elevationProfileMinimized = true;
 let elevationProfileMarker = null;
+let elevationProfileRedrawFrame = null;
+
+function scheduleElevationProfileRedraw() {
+    if (elevationProfileRedrawFrame !== null) {
+        cancelAnimationFrame(elevationProfileRedrawFrame);
+        elevationProfileRedrawFrame = null;
+    }
+
+    elevationProfileRedrawFrame = requestAnimationFrame(() => {
+        elevationProfileRedrawFrame = requestAnimationFrame(() => {
+            elevationProfileRedrawFrame = null;
+            if (elevationProfileData && !elevationProfileMinimized) {
+                drawElevationProfile();
+            }
+        });
+    });
+}
 
 function buildElevationProfileData(allSegments) {
     const points = [];
@@ -1499,11 +1599,16 @@ function showElevationProfile() {
         container.classList.remove('minimized');
     }
     drawElevationProfile();
+    scheduleElevationProfileRedraw();
     updateElevationProfileInfo(null);
     adjustMapControlsForElevation();
 }
 
 function hideElevationProfile() {
+    if (elevationProfileRedrawFrame !== null) {
+        cancelAnimationFrame(elevationProfileRedrawFrame);
+        elevationProfileRedrawFrame = null;
+    }
     const container = document.getElementById('elevation-profile');
     container.style.display = 'none';
     elevationProfileData = null;
@@ -1519,6 +1624,7 @@ function toggleElevationProfile() {
     } else {
         container.classList.remove('minimized');
         drawElevationProfile();
+        scheduleElevationProfileRedraw();
     }
     adjustMapControlsForElevation();
 }
@@ -1952,8 +2058,9 @@ async function initializeApp() {
     }
     handleLayerChange(savedLayer);
     updateUI();
-
-    await refreshUploadedFiles();
+    if (window.innerWidth <= 600 && !isControlsMinimized) {
+        toggleControls();
+    }
 
     const params = new URLSearchParams(location.search);
     const sharedGpxId = params.get('gpx');
