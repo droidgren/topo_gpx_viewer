@@ -28,6 +28,13 @@ const OPENTOPO_URL = "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png";
 const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const SATELLITE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 const WORKER_URL = "https://lm.clackspark.workers.dev";
+const API_BASE = '/api';
+// Toggle this when deploying with or without the FastAPI backend.
+const BACKEND_AVAILABLE = false;
+
+function isBackendEnabled() {
+    return BACKEND_AVAILABLE;
+}
 
 // ==========================================
 // 2. DOM ELEMENTS
@@ -75,6 +82,11 @@ let deferredInstallPrompt = null;
 let gpsMarker = null;
 let gpsWatchId = null;
 let isElevationCursorActive = false;
+let currentSharedGpxId = null;
+let currentGpxFilename = null;
+let currentGpxShareUrl = null;
+let uploadedGpxFiles = [];
+let uploadedGpxListState = 'idle';
 
 // Load saved position
 const savedLat = parseFloat(localStorage.getItem('gpxv_lat')) || 67.89;
@@ -204,8 +216,30 @@ function updateLanguage() {
 
         if (document.getElementById('section-routes-title')) document.getElementById('section-routes-title').textContent = t.section_routes_title;
         if (document.getElementById('gpx-btn')) document.getElementById('gpx-btn').textContent = t.btn_gpx;
+        if (document.getElementById('gpx-modal-title')) document.getElementById('gpx-modal-title').textContent = t.modal_gpx_title || t.btn_gpx;
+        if (document.getElementById('gpx-modal-desc')) {
+            document.getElementById('gpx-modal-desc').textContent = isBackendEnabled()
+                ? (t.modal_gpx_desc || '')
+                : (t.modal_gpx_desc_local || t.modal_gpx_desc || '');
+        }
+        if (document.getElementById('gpx-upload-btn')) {
+            document.getElementById('gpx-upload-btn').textContent = isBackendEnabled()
+                ? (t.btn_upload_gpx || 'Upload')
+                : (t.btn_open_local_gpx || t.btn_upload_gpx || 'Open GPX file');
+        }
+        if (document.getElementById('gpx-modal-close')) document.getElementById('gpx-modal-close').textContent = t.btn_close;
         if (document.getElementById('gpx-clear-btn')) document.getElementById('gpx-clear-btn').textContent = t.btn_gpx_clear;
-        if (document.getElementById('share-map-btn')) document.getElementById('share-map-btn').textContent = t.btn_share_map;
+        const shareMapBtn = document.getElementById('share-map-btn');
+        if (shareMapBtn) {
+            const shareLabel = t.btn_share_map_title || t.btn_share_map || 'Share Map View';
+            shareMapBtn.title = shareLabel;
+            shareMapBtn.setAttribute('aria-label', shareLabel);
+        }
+        if (document.getElementById('uploaded-gpx-title')) {
+            document.getElementById('uploaded-gpx-title').textContent = isBackendEnabled()
+                ? t.uploaded_gpx_title
+                : (t.uploaded_gpx_title_local || t.uploaded_gpx_title);
+        }
         if (document.getElementById('lbl-track-color')) document.getElementById('lbl-track-color').textContent = t.lbl_track_color;
         if (document.getElementById('lbl-track-width')) document.getElementById('lbl-track-width').textContent = t.lbl_track_width;
         if (document.getElementById('lbl-km-labels')) document.getElementById('lbl-km-labels').textContent = t.lbl_km_labels;
@@ -254,6 +288,8 @@ function updateLanguage() {
         if (lblElevMapSync) lblElevMapSync.textContent = t.lbl_elev_map_sync;
         const lblCrosshair = document.getElementById('lbl-show-crosshair');
         if (lblCrosshair) lblCrosshair.textContent = t.lbl_show_crosshair;
+
+        renderUploadedFiles();
     }
 }
 
@@ -357,6 +393,27 @@ function cancelApiKey() {
 function showInfo() { document.getElementById('info-modal').style.display = 'flex'; }
 function closeInfo() { document.getElementById('info-modal').style.display = 'none'; }
 
+function showGpxModal() {
+    const modal = document.getElementById('gpx-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    if (isBackendEnabled()) {
+        refreshUploadedFiles();
+    } else {
+        uploadedGpxFiles = [];
+        uploadedGpxListState = 'disabled';
+        renderUploadedFiles();
+    }
+}
+
+function closeGpxModal() {
+    const modal = document.getElementById('gpx-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+window.showGpxModal = showGpxModal;
+window.closeGpxModal = closeGpxModal;
+
 function toggleControls() {
     const btn = document.querySelector('.toggle-btn');
     isControlsMinimized = !isControlsMinimized;
@@ -436,6 +493,13 @@ function locateUser() {
 window.clearGpxRoute = function () {
     if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
     gpxTrackData = null;
+    currentSharedGpxId = null;
+    currentGpxFilename = null;
+    currentGpxShareUrl = null;
+    const params = new URLSearchParams(location.search);
+    params.delete('gpx');
+    const queryString = params.toString();
+    history.replaceState(null, '', location.pathname + (queryString ? '?' + queryString : '') + location.hash);
     const clearBtn = document.getElementById('gpx-clear-btn');
     if (clearBtn) clearBtn.style.display = 'none';
     const infoDiv = document.getElementById('gpx-track-info');
@@ -444,23 +508,145 @@ window.clearGpxRoute = function () {
     statusDiv.textContent = translations[currentLang].status_gpx_cleared;
 };
 
-window.generateShareLink = function () {
-    const t = translations[currentLang];
+function getCurrentMapHash() {
     const center = map.getCenter();
     const zoom = Math.round(map.getZoom());
     const lat = center.lat.toFixed(5);
     const lng = center.lng.toFixed(5);
     const currentLayerKey = localStorage.getItem('gpxv_layer') || 'opentopo';
-    const hash = '#map=' + zoom + '/' + lat + '/' + lng + '/' + currentLayerKey;
-    const link = location.origin + location.pathname + hash;
+    return '#map=' + zoom + '/' + lat + '/' + lng + '/' + currentLayerKey;
+}
+
+function getCurrentShareLink() {
+    if (isBackendEnabled() && currentSharedGpxId) {
+        const params = new URLSearchParams();
+        params.set('gpx', currentSharedGpxId);
+        return location.origin + location.pathname + '?' + params.toString();
+    }
+    return location.origin + location.pathname + getCurrentMapHash();
+}
+
+function fallbackCopyTextToClipboard(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.setAttribute('readonly', '');
+    textArea.style.position = 'fixed';
+    textArea.style.top = '0';
+    textArea.style.left = '-9999px';
+    document.body.appendChild(textArea);
+
+    const selection = document.getSelection();
+    const previousRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, textArea.value.length);
+
+    let didCopy = false;
+    try {
+        didCopy = document.execCommand('copy');
+    } catch (err) {
+        didCopy = false;
+    }
+
+    document.body.removeChild(textArea);
+    if (selection) {
+        selection.removeAllRanges();
+        if (previousRange) {
+            selection.addRange(previousRange);
+        }
+    }
+    return didCopy;
+}
+
+async function copyTextToClipboard(text, successMessage, errorMessage) {
+    let didCopy = false;
+
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(link).then(() => {
-            statusDiv.textContent = t.status_link_copied || 'Link copied to clipboard.';
-        }).catch(() => {
-            statusDiv.textContent = t.status_clipboard_error || 'Could not copy link.';
-        });
+        try {
+            await navigator.clipboard.writeText(text);
+            didCopy = true;
+        } catch (err) {
+            didCopy = fallbackCopyTextToClipboard(text);
+        }
     } else {
-        statusDiv.textContent = t.status_clipboard_error || 'Could not copy link.';
+        didCopy = fallbackCopyTextToClipboard(text);
+    }
+
+    if (didCopy) {
+        statusDiv.textContent = successMessage;
+        return;
+    }
+
+    window.prompt('Copy this link:', text);
+    statusDiv.textContent = errorMessage;
+}
+
+window.generateShareLink = function () {
+    const t = translations[currentLang];
+    const link = getCurrentShareLink();
+    const successMessage = isBackendEnabled() && currentSharedGpxId
+        ? (t.status_gpx_share_copied || t.status_link_copied || 'Link copied to clipboard.')
+        : (t.status_link_copied || 'Link copied to clipboard.');
+    copyTextToClipboard(
+        link,
+        successMessage,
+        t.status_clipboard_error || 'Could not copy link.'
+    );
+};
+
+window.copyUploadedGpxLink = function (gpxId) {
+    const t = translations[currentLang];
+    if (!isBackendEnabled()) {
+        return copyTextToClipboard(
+            getCurrentShareLink(),
+            t.status_link_copied || 'Link copied to clipboard.',
+            t.status_clipboard_error || 'Could not copy link.'
+        );
+    }
+    const params = new URLSearchParams();
+    params.set('gpx', gpxId);
+    const link = location.origin + location.pathname + '?' + params.toString();
+    copyTextToClipboard(
+        link,
+        t.status_gpx_share_copied || t.status_link_copied || 'Link copied to clipboard.',
+        t.status_clipboard_error || 'Could not copy link.'
+    );
+};
+
+window.deleteUploadedGpx = async function (gpxId) {
+    const t = translations[currentLang];
+    if (!gpxId) return;
+    if (!isBackendEnabled()) {
+        statusDiv.textContent = t.status_backend_disabled || 'Backend sharing is disabled in this build.';
+        return;
+    }
+
+    const fileEntry = uploadedGpxFiles.find(file => file.id === gpxId);
+    const filename = fileEntry && fileEntry.filename ? fileEntry.filename : 'GPX file';
+    const confirmMessage = (t.confirm_delete_uploaded_gpx || 'Delete "{name}"?').replace('{name}', filename);
+    if (!window.confirm(confirmMessage)) {
+        return;
+    }
+
+    statusDiv.textContent = t.status_deleting_gpx || t.status_loading || 'Loading data...';
+    try {
+        const response = await fetch(API_BASE + '/files/' + encodeURIComponent(gpxId), {
+            method: 'DELETE',
+            credentials: 'same-origin'
+        });
+        if (!response.ok) {
+            throw new Error('Failed to delete GPX');
+        }
+
+        if (currentSharedGpxId === gpxId) {
+            window.clearGpxRoute();
+        }
+
+        await refreshUploadedFiles();
+        statusDiv.textContent = (t.status_gpx_deleted || 'GPX file deleted.').replace('{name}', filename);
+    } catch (err) {
+        statusDiv.textContent = t.status_delete_gpx_error || 'Could not delete the GPX file.';
     }
 };
 
@@ -788,103 +974,352 @@ function rebuildGpxLayer() {
     }
 }
 
-document.getElementById('gpx-file-input').addEventListener('change', function (e) {
-    const file = e.target.files[0];
-    if (!file) return;
+function parseGpxText(gpxText) {
     const t = translations[currentLang];
-    const reader = new FileReader();
-    reader.onload = function (evt) {
-        try {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(evt.target.result, 'application/xml');
-            if (doc.querySelector('parsererror')) {
-                statusDiv.textContent = t.status_gpx_error;
-                return;
-            }
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(gpxText, 'application/xml');
+    if (doc.querySelector('parsererror')) {
+        throw new Error(t.status_gpx_error || 'Failed to load GPX file.');
+    }
 
-            if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
+    const allSegments = [];
+    const waypoints = [];
+    let totalPoints = 0;
 
-            const allSegments = [];
-            const waypoints = [];
-            let totalPoints = 0;
-
-            doc.querySelectorAll('trk').forEach(trk => {
-                trk.querySelectorAll('trkseg').forEach(seg => {
-                    const pts = [];
-                    seg.querySelectorAll('trkpt').forEach(pt => {
-                        const lat = parseFloat(pt.getAttribute('lat'));
-                        const lon = parseFloat(pt.getAttribute('lon'));
-                        const eleEl = pt.querySelector('ele');
-                        const ele = eleEl ? parseFloat(eleEl.textContent) : null;
-                        if (!isNaN(lat) && !isNaN(lon)) pts.push({ lat, lon, ele: isNaN(ele) ? null : ele });
-                    });
-                    if (pts.length > 0) {
-                        allSegments.push(pts);
-                        totalPoints += pts.length;
-                    }
-                });
-            });
-
-            doc.querySelectorAll('rte').forEach(rte => {
-                const pts = [];
-                rte.querySelectorAll('rtept').forEach(pt => {
-                    const lat = parseFloat(pt.getAttribute('lat'));
-                    const lon = parseFloat(pt.getAttribute('lon'));
-                    const eleEl = pt.querySelector('ele');
-                    const ele = eleEl ? parseFloat(eleEl.textContent) : null;
-                    if (!isNaN(lat) && !isNaN(lon)) pts.push({ lat, lon, ele: isNaN(ele) ? null : ele });
-                });
-                if (pts.length > 0) {
-                    allSegments.push(pts);
-                    totalPoints += pts.length;
-                }
-            });
-
-            doc.querySelectorAll('wpt').forEach(pt => {
+    doc.querySelectorAll('trk').forEach(trk => {
+        trk.querySelectorAll('trkseg').forEach(seg => {
+            const pts = [];
+            seg.querySelectorAll('trkpt').forEach(pt => {
                 const lat = parseFloat(pt.getAttribute('lat'));
                 const lon = parseFloat(pt.getAttribute('lon'));
-                if (!isNaN(lat) && !isNaN(lon)) {
-                    const nameEl = pt.querySelector('name');
-                    const name = nameEl ? nameEl.textContent : '';
-                    waypoints.push({ lat, lon, name });
-                    totalPoints++;
-                }
+                const eleEl = pt.querySelector('ele');
+                const ele = eleEl ? parseFloat(eleEl.textContent) : null;
+                if (!isNaN(lat) && !isNaN(lon)) pts.push({ lat, lon, ele: isNaN(ele) ? null : ele });
             });
-
-            if (allSegments.length === 0 && waypoints.length === 0) {
-                statusDiv.textContent = t.status_gpx_empty;
-                return;
+            if (pts.length > 0) {
+                allSegments.push(pts);
+                totalPoints += pts.length;
             }
+        });
+    });
 
-            const stats = computeTrackStats(allSegments);
-            gpxTrackData = { segments: allSegments, waypoints, ...stats };
-
-            rebuildGpxLayer();
-            updateGpxTrackInfo();
-            showElevationProfile();
-
-            if (gpxLayer) {
-                const allCoords = [];
-                allSegments.forEach(s => s.forEach(p => allCoords.push([p.lat, p.lon])));
-                waypoints.forEach(w => allCoords.push([w.lat, w.lon]));
-                if (allCoords.length > 0) {
-                    map.fitBounds(L.latLngBounds(allCoords).pad(0.1));
-                }
-            }
-
-            const clearBtn = document.getElementById('gpx-clear-btn');
-            if (clearBtn) clearBtn.style.display = 'block';
-
-            statusDiv.textContent = t.status_gpx_loaded.replace('{n}', totalPoints);
-        } catch (err) {
-            statusDiv.textContent = t.status_gpx_error;
+    doc.querySelectorAll('rte').forEach(rte => {
+        const pts = [];
+        rte.querySelectorAll('rtept').forEach(pt => {
+            const lat = parseFloat(pt.getAttribute('lat'));
+            const lon = parseFloat(pt.getAttribute('lon'));
+            const eleEl = pt.querySelector('ele');
+            const ele = eleEl ? parseFloat(eleEl.textContent) : null;
+            if (!isNaN(lat) && !isNaN(lon)) pts.push({ lat, lon, ele: isNaN(ele) ? null : ele });
+        });
+        if (pts.length > 0) {
+            allSegments.push(pts);
+            totalPoints += pts.length;
         }
+    });
+
+    doc.querySelectorAll('wpt').forEach(pt => {
+        const lat = parseFloat(pt.getAttribute('lat'));
+        const lon = parseFloat(pt.getAttribute('lon'));
+        if (!isNaN(lat) && !isNaN(lon)) {
+            const nameEl = pt.querySelector('name');
+            const name = nameEl ? nameEl.textContent : '';
+            waypoints.push({ lat, lon, name });
+            totalPoints++;
+        }
+    });
+
+    if (allSegments.length === 0 && waypoints.length === 0) {
+        throw new Error(t.status_gpx_empty || 'No track data found in GPX file.');
+    }
+
+    return {
+        segments: allSegments,
+        waypoints,
+        totalPoints,
+        stats: computeTrackStats(allSegments)
     };
-    reader.onerror = function () {
-        statusDiv.textContent = translations[currentLang].status_gpx_error;
+}
+
+function fitGpxBounds(allSegments, waypoints) {
+    if (!gpxLayer) return;
+    const allCoords = [];
+    allSegments.forEach(segment => segment.forEach(point => allCoords.push([point.lat, point.lon])));
+    waypoints.forEach(point => allCoords.push([point.lat, point.lon]));
+    if (allCoords.length > 0) {
+        map.fitBounds(L.latLngBounds(allCoords).pad(0.1));
+    }
+}
+
+function setActiveGpxSource(source) {
+    currentSharedGpxId = isBackendEnabled() && source && source.id ? source.id : null;
+    currentGpxFilename = source && source.filename ? source.filename : null;
+    currentGpxShareUrl = isBackendEnabled() && source && source.shareUrl ? source.shareUrl : null;
+
+    const params = new URLSearchParams(location.search);
+    if (isBackendEnabled() && currentSharedGpxId) {
+        params.set('gpx', currentSharedGpxId);
+    } else {
+        params.delete('gpx');
+    }
+    const queryString = params.toString();
+    history.replaceState(null, '', location.pathname + (queryString ? '?' + queryString : '') + location.hash);
+}
+
+function applyParsedGpxData(parsedGpx, options = {}) {
+    const t = translations[currentLang];
+    if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
+    gpxTrackData = {
+        segments: parsedGpx.segments,
+        waypoints: parsedGpx.waypoints,
+        ...parsedGpx.stats
     };
-    reader.readAsText(file);
+    setActiveGpxSource(options.source || null);
+
+    rebuildGpxLayer();
+    updateGpxTrackInfo();
+    showElevationProfile();
+
+    if (!options.skipFitBounds) {
+        fitGpxBounds(parsedGpx.segments, parsedGpx.waypoints);
+    }
+
+    const clearBtn = document.getElementById('gpx-clear-btn');
+    if (clearBtn) clearBtn.style.display = 'block';
+
+    const statusMessage = options.statusMessage || t.status_gpx_loaded || 'GPX route loaded ({n} points).';
+    statusDiv.textContent = statusMessage.replace('{n}', parsedGpx.totalPoints);
+}
+
+function normalizeUploadedFileEntry(fileEntry) {
+    if (typeof fileEntry === 'string') {
+        return {
+            id: fileEntry,
+            filename: fileEntry,
+            shareUrl: null,
+            uploadedAt: null
+        };
+    }
+    return {
+        id: fileEntry.id || fileEntry.filename,
+        filename: fileEntry.filename || fileEntry.name || fileEntry.id || 'GPX file',
+        shareUrl: fileEntry.share_url || fileEntry.shareUrl || null,
+        uploadedAt: fileEntry.uploaded_at || fileEntry.uploadedAt || null
+    };
+}
+
+function renderUploadedFiles() {
+    const listEl = document.getElementById('uploaded-gpx-list');
+    const emptyEl = document.getElementById('uploaded-gpx-empty');
+    if (!listEl || !emptyEl) return;
+
+    const t = translations[currentLang];
+    listEl.innerHTML = '';
+    if (!isBackendEnabled() || uploadedGpxListState === 'disabled') {
+        emptyEl.style.display = '';
+        emptyEl.textContent = t.uploaded_gpx_unavailable || 'Backend upload and sharing are disabled in this build.';
+        return;
+    }
+
+    if (uploadedGpxListState === 'loading') {
+        emptyEl.style.display = '';
+        emptyEl.textContent = t.uploaded_gpx_loading || 'Loading uploaded GPX files...';
+        return;
+    }
+
+    if (uploadedGpxListState === 'error') {
+        emptyEl.style.display = '';
+        emptyEl.textContent = t.uploaded_gpx_error || 'Could not load uploaded GPX files.';
+        return;
+    }
+
+    if (!uploadedGpxFiles.length) {
+        emptyEl.style.display = '';
+        emptyEl.textContent = t.uploaded_gpx_empty || 'No uploaded GPX files yet.';
+        return;
+    }
+
+    emptyEl.style.display = 'none';
+    uploadedGpxFiles.forEach(fileEntry => {
+        const row = document.createElement('div');
+        row.className = 'uploaded-gpx-item';
+
+        const meta = document.createElement('div');
+        meta.className = 'uploaded-gpx-meta';
+
+        const name = document.createElement('span');
+        name.className = 'uploaded-gpx-name';
+        name.textContent = fileEntry.filename;
+        meta.appendChild(name);
+
+        if (fileEntry.uploadedAt) {
+            const stamp = document.createElement('span');
+            stamp.className = 'uploaded-gpx-date';
+            const uploadedDate = new Date(fileEntry.uploadedAt);
+            stamp.textContent = Number.isNaN(uploadedDate.getTime())
+                ? fileEntry.uploadedAt
+                : uploadedDate.toLocaleString();
+            meta.appendChild(stamp);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'uploaded-gpx-actions';
+
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'secondary-btn';
+        openBtn.textContent = t.btn_open_uploaded_gpx || 'Open';
+        openBtn.addEventListener('click', async () => {
+            const didLoad = await loadSharedGpxById(fileEntry.id, { filename: fileEntry.filename });
+            if (didLoad) {
+                closeGpxModal();
+            }
+        });
+        actions.appendChild(openBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'danger-btn';
+        deleteBtn.textContent = t.btn_delete_uploaded_gpx || 'Delete';
+        deleteBtn.addEventListener('click', () => {
+            window.deleteUploadedGpx(fileEntry.id);
+        });
+        actions.appendChild(deleteBtn);
+
+        row.appendChild(meta);
+        row.appendChild(actions);
+        listEl.appendChild(row);
+    });
+}
+
+async function refreshUploadedFiles() {
+    if (!isBackendEnabled()) {
+        uploadedGpxFiles = [];
+        uploadedGpxListState = 'disabled';
+        renderUploadedFiles();
+        return;
+    }
+
+    uploadedGpxListState = 'loading';
+    renderUploadedFiles();
+    try {
+        const response = await fetch(API_BASE + '/files', {
+            cache: 'no-store',
+            credentials: 'same-origin'
+        });
+        if (!response.ok) {
+            throw new Error('Failed to fetch uploaded GPX files');
+        }
+        const payload = await response.json();
+        const files = Array.isArray(payload.files) ? payload.files : [];
+        uploadedGpxFiles = files.map(normalizeUploadedFileEntry).filter(fileEntry => fileEntry.id);
+        uploadedGpxListState = 'ready';
+        renderUploadedFiles();
+    } catch (err) {
+        uploadedGpxFiles = [];
+        uploadedGpxListState = 'error';
+        renderUploadedFiles();
+    }
+}
+
+async function loadSharedGpxById(gpxId, options = {}) {
+    const t = translations[currentLang];
+    if (!gpxId) return;
+    if (!isBackendEnabled()) {
+        statusDiv.textContent = t.status_shared_gpx_backend_disabled || t.status_backend_disabled || 'Backend sharing is disabled in this build.';
+        return false;
+    }
+    statusDiv.textContent = t.status_loading_shared_gpx || t.status_loading || 'Loading data...';
+    try {
+        const response = await fetch(API_BASE + '/files/' + encodeURIComponent(gpxId) + '/raw', {
+            cache: 'no-store',
+            credentials: 'same-origin'
+        });
+        if (!response.ok) {
+            throw new Error('Failed to load shared GPX');
+        }
+        const gpxText = await response.text();
+        const parsedGpx = parseGpxText(gpxText);
+        applyParsedGpxData(parsedGpx, {
+            source: {
+                id: gpxId,
+                filename: options.filename || currentGpxFilename || gpxId,
+                shareUrl: options.shareUrl || null
+            },
+            skipFitBounds: options.skipFitBounds,
+            statusMessage: t.status_shared_gpx_loaded || t.status_gpx_loaded || 'GPX route loaded ({n} points).'
+        });
+        const params = new URLSearchParams(location.search);
+        params.set('gpx', gpxId);
+        history.replaceState(null, '', location.pathname + '?' + params.toString() + location.hash);
+        return true;
+    } catch (err) {
+        statusDiv.textContent = t.status_shared_gpx_error || t.status_gpx_error || 'Failed to load GPX file.';
+        return false;
+    }
+}
+
+async function uploadGpxFile(file) {
+    if (!isBackendEnabled()) {
+        return null;
+    }
+
+    const t = translations[currentLang];
+    const formData = new FormData();
+    formData.append('file', file);
+    statusDiv.textContent = t.status_uploading_gpx || t.status_loading || 'Loading data...';
+
+    const response = await fetch(API_BASE + '/upload', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: formData
+    });
+    if (!response.ok) {
+        throw new Error('Failed to upload GPX');
+    }
+
+    const payload = await response.json();
+    return {
+        id: payload.id || payload.filename,
+        filename: payload.filename || file.name,
+        shareUrl: payload.share_url || payload.shareUrl || null
+    };
+}
+
+async function handleLocalFileSelection(file) {
+    const t = translations[currentLang];
+    if (!file) return;
+    try {
+        const gpxText = await file.text();
+        const parsedGpx = parseGpxText(gpxText);
+        let uploadResult = null;
+        if (isBackendEnabled()) {
+            try {
+                uploadResult = await uploadGpxFile(file);
+            } catch (uploadErr) {
+                uploadResult = null;
+            }
+        }
+        applyParsedGpxData(parsedGpx, {
+            source: uploadResult,
+            statusMessage: uploadResult
+                ? (t.status_gpx_uploaded || t.status_gpx_loaded || 'GPX route loaded ({n} points).')
+                : (isBackendEnabled()
+                    ? (t.status_gpx_loaded_local || t.status_gpx_loaded || 'GPX route loaded ({n} points).')
+                    : (t.status_gpx_loaded_local_only || t.status_gpx_loaded || 'GPX route loaded ({n} points).'))
+        });
+        if (uploadResult) {
+            await refreshUploadedFiles();
+        }
+    } catch (err) {
+        statusDiv.textContent = t.status_gpx_error || 'Failed to load GPX file.';
+    }
+}
+
+document.getElementById('gpx-file-input').addEventListener('change', async function (e) {
+    const file = e.target.files[0];
     e.target.value = '';
+    await handleLocalFileSelection(file);
 });
 
 // Live-update track when settings change
@@ -1013,17 +1448,19 @@ let _tutorialOverlayClickHandler = null;
 const tutorialSteps = [
     { targetSelector: null, titleKey: 'tutorial_welcome_title', textKey: 'tutorial_welcome_text' },
     { targetSelector: '.circle-btn:not(.info-btn)', titleKey: 'tutorial_language_title', textKey: 'tutorial_language_text' },
+    { targetSelector: '#share-map-btn', titleKey: 'tutorial_share_title', textKey: 'tutorial_share_text' },
     { targetSelector: '.info-btn', titleKey: 'tutorial_info_title', textKey: 'tutorial_info_text' },
     { targetSelector: '.toggle-btn', titleKey: 'tutorial_minimize_title', textKey: 'tutorial_minimize_text' },
     { targetSelector: '#layerSelect', titleKey: 'tutorial_layers_title', textKey: 'tutorial_layers_text' },
     { targetSelector: '.search-group', titleKey: 'tutorial_search_title', textKey: 'tutorial_search_text' },
     { targetSelector: '#section-routes-title', targetSelectorEnd: '#gpx-btn', titleKey: 'tutorial_routes_title', textKey: 'tutorial_routes_text' },
-    { targetSelector: '#share-map-btn', titleKey: 'tutorial_share_title', textKey: 'tutorial_share_text' },
     { targetSelector: null, titleKey: 'tutorial_tips_title', textKey: 'tutorial_tips_text' }
 ];
+const tutorialExpandStepIndex = tutorialSteps.findIndex(step => step.titleKey === 'tutorial_layers_title');
+const tutorialCollapseAgainStepIndex = tutorialSteps.findIndex(step => step.titleKey === 'tutorial_tips_title');
 
 function startTutorial() {
-    if (controls && controls.classList.contains('minimized')) {
+    if (controls && !controls.classList.contains('minimized')) {
         toggleControls();
     }
     tutorialStep = 0;
@@ -1052,6 +1489,16 @@ function renderTutorialStep() {
     const prevBtn = document.getElementById('tutorial-prev');
     const nextBtn = document.getElementById('tutorial-next');
     const progressEl = document.getElementById('tutorial-progress');
+
+    if (controls && tutorialExpandStepIndex !== -1 && tutorialCollapseAgainStepIndex !== -1) {
+        const shouldBeExpanded = tutorialStep >= tutorialExpandStepIndex && tutorialStep < tutorialCollapseAgainStepIndex;
+        const isMinimized = controls.classList.contains('minimized');
+        if (shouldBeExpanded && isMinimized) {
+            toggleControls();
+        } else if (!shouldBeExpanded && !isMinimized) {
+            toggleControls();
+        }
+    }
 
     titleEl.textContent = t[step.titleKey] || '';
     textEl.textContent = t[step.textKey] || '';
@@ -1157,8 +1604,25 @@ function finishTutorial() {
 // ==========================================
 
 let elevationProfileData = null; // [{dist, ele, lat, lon}, ...]
-let elevationProfileMinimized = false;
+let elevationProfileMinimized = true;
 let elevationProfileMarker = null;
+let elevationProfileRedrawFrame = null;
+
+function scheduleElevationProfileRedraw() {
+    if (elevationProfileRedrawFrame !== null) {
+        cancelAnimationFrame(elevationProfileRedrawFrame);
+        elevationProfileRedrawFrame = null;
+    }
+
+    elevationProfileRedrawFrame = requestAnimationFrame(() => {
+        elevationProfileRedrawFrame = requestAnimationFrame(() => {
+            elevationProfileRedrawFrame = null;
+            if (elevationProfileData && !elevationProfileMinimized) {
+                drawElevationProfile();
+            }
+        });
+    });
+}
 
 function buildElevationProfileData(allSegments) {
     const points = [];
@@ -1183,6 +1647,13 @@ function getElevationBarHeight() {
     if (!elevationProfileData) return 0;
     const container = document.getElementById('elevation-profile');
     if (!container || container.style.display === 'none') return 0;
+
+    const body = document.getElementById('elevation-profile-body');
+    const rect = body ? body.getBoundingClientRect() : container.getBoundingClientRect();
+    if (rect.height > 0) {
+        return rect.height;
+    }
+
     if (elevationProfileMinimized) return 26;
     return window.innerWidth >= 600 ? 150 : 130;
 }
@@ -1190,7 +1661,11 @@ function getElevationBarHeight() {
 function adjustMapControlsForElevation() {
     const h = getElevationBarHeight();
     const bottomRight = document.querySelector('.leaflet-bottom.leaflet-right');
-    if (bottomRight) bottomRight.style.bottom = h + 'px';
+    if (bottomRight) {
+        bottomRight.style.bottom = h > 0
+            ? `calc(${Math.ceil(h)}px + env(safe-area-inset-bottom, 0px))`
+            : '';
+    }
 }
 
 function showElevationProfile() {
@@ -1207,11 +1682,16 @@ function showElevationProfile() {
         container.classList.remove('minimized');
     }
     drawElevationProfile();
+    scheduleElevationProfileRedraw();
     updateElevationProfileInfo(null);
     adjustMapControlsForElevation();
 }
 
 function hideElevationProfile() {
+    if (elevationProfileRedrawFrame !== null) {
+        cancelAnimationFrame(elevationProfileRedrawFrame);
+        elevationProfileRedrawFrame = null;
+    }
     const container = document.getElementById('elevation-profile');
     container.style.display = 'none';
     elevationProfileData = null;
@@ -1227,6 +1707,7 @@ function toggleElevationProfile() {
     } else {
         container.classList.remove('minimized');
         drawElevationProfile();
+        scheduleElevationProfileRedraw();
     }
     adjustMapControlsForElevation();
 }
@@ -1236,12 +1717,21 @@ function drawElevationProfile() {
     if (!canvas || !elevationProfileData || elevationProfileData.length < 2) return;
 
     const body = document.getElementById('elevation-profile-body');
+    if (!body) return;
     const rect = body.getBoundingClientRect();
+    if (rect.width <= 80 || rect.height <= 40) {
+        if (!elevationProfileMinimized) {
+            scheduleElevationProfileRedraw();
+        }
+        return;
+    }
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
     const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const W = rect.width;
     const H = rect.height;
@@ -1267,9 +1757,6 @@ function drawElevationProfile() {
 
     const xScale = (d) => PAD_LEFT + (d / totalDist) * plotW;
     const yScale = (e) => PAD_TOP + plotH - ((e - eleMin) / (eleMax - eleMin)) * plotH;
-
-    // Clear
-    ctx.clearRect(0, 0, W, H);
 
     // Grid lines - Y axis (elevation)
     ctx.strokeStyle = '#e0e0e0';
@@ -1597,6 +2084,30 @@ function removeElevationMarker() {
         }
         adjustMapControlsForElevation();
     });
+
+    const elevationProfileBody = document.getElementById('elevation-profile-body');
+    if (elevationProfileBody && 'ResizeObserver' in window) {
+        let lastBodyWidth = 0;
+        let lastBodyHeight = 0;
+        const resizeObserver = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (!entry || !elevationProfileData) return;
+
+            const width = entry.contentRect.width;
+            const height = entry.contentRect.height;
+            if (Math.abs(width - lastBodyWidth) < 0.5 && Math.abs(height - lastBodyHeight) < 0.5) {
+                return;
+            }
+
+            lastBodyWidth = width;
+            lastBodyHeight = height;
+            adjustMapControlsForElevation();
+            if (!elevationProfileMinimized) {
+                scheduleElevationProfileRedraw();
+            }
+        });
+        resizeObserver.observe(elevationProfileBody);
+    }
 })();
 
 // ==========================================
@@ -1622,29 +2133,13 @@ map.on('click', () => {
     }
 });
 
-// Initialize
-updateLanguage();
-initServiceWorker();
-if (layerSelect) {
-    layerSelect.value = savedLayer;
-}
-const savedUnit = localStorage.getItem('gpxv_distance_unit');
-if (savedUnit) {
-    const unitSel = document.getElementById('distanceUnit');
-    if (unitSel) unitSel.value = savedUnit;
-}
-handleLayerChange(savedLayer);
-updateUI();
-
-// URL hash parameters
-// URL hash: #map=zoom/lat/lng/layer
-(function handleHashParams() {
+function applyMapHashParams() {
     const hash = location.hash.replace(/^#/, '');
-    if (!hash) return;
+    if (!hash) return false;
     const match = hash.match(/^map=(.+)/);
-    if (!match) return;
+    if (!match) return false;
     const parts = match[1].split('/');
-    if (parts.length < 3) return;
+    if (parts.length < 3) return false;
     const zoom = parseInt(parts[0]);
     const lat = parseFloat(parts[1]);
     const lng = parseFloat(parts[2]);
@@ -1658,8 +2153,49 @@ updateUI();
             handleLayerChange(layer);
             if (layerSelect) layerSelect.value = layer;
         }
+        return true;
     }
-})();
+    return false;
+}
+
+async function initializeApp() {
+    updateLanguage();
+    initServiceWorker();
+    if (layerSelect) {
+        layerSelect.value = savedLayer;
+    }
+    const savedUnit = localStorage.getItem('gpxv_distance_unit');
+    if (savedUnit) {
+        const unitSel = document.getElementById('distanceUnit');
+        if (unitSel) unitSel.value = savedUnit;
+    }
+    handleLayerChange(savedLayer);
+    updateUI();
+    if (window.innerWidth <= 600 && !isControlsMinimized) {
+        toggleControls();
+    }
+
+    const params = new URLSearchParams(location.search);
+    const sharedGpxId = params.get('gpx');
+    const hasMapHash = location.hash.startsWith('#map=');
+    if (sharedGpxId) {
+        if (isBackendEnabled()) {
+            await loadSharedGpxById(sharedGpxId, { skipFitBounds: hasMapHash });
+        } else {
+            params.delete('gpx');
+            const queryString = params.toString();
+            history.replaceState(null, '', location.pathname + (queryString ? '?' + queryString : '') + location.hash);
+            statusDiv.textContent = translations[currentLang].status_shared_gpx_backend_disabled
+                || translations[currentLang].status_backend_disabled
+                || 'Backend sharing is disabled in this build.';
+        }
+    }
+    if (hasMapHash) {
+        applyMapHashParams();
+    }
+}
+
+initializeApp();
 
 // Crosshair toggle
 (function () {

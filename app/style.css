@@ -7,6 +7,7 @@ body {
 
 #map {
     height: 100vh;
+    height: 100dvh;
     width: 100%;
 }
 
@@ -94,6 +95,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 h3 {
@@ -101,6 +103,8 @@ h3 {
     font-size: 18px;
     color: #333;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .toggle-btn {
@@ -140,6 +144,13 @@ h3 {
     font-weight: bold;
     font-style: italic;
     color: #555;
+}
+
+.share-circle-btn {
+    font-size: 13px;
+    color: #1565C0;
+    line-height: 1;
+    transform: translateX(0.5px) translateY(0.5px);
 }
 
 /* FLAG IMAGE */
@@ -209,6 +220,30 @@ h3 {
     border: 1px solid #ccc;
     border-radius: 6px;
     font-family: monospace;
+}
+
+.gpx-modal-content {
+    max-width: 520px;
+    text-align: left;
+}
+
+.gpx-modal-content h4,
+.gpx-modal-content p {
+    text-align: left;
+}
+
+.gpx-modal-actions {
+    margin: 12px 0;
+}
+
+.gpx-modal-actions .gpx-btn,
+#gpx-modal-close {
+    margin-top: 0;
+}
+
+.gpx-modal-panel {
+    margin-top: 0;
+    margin-bottom: 14px;
 }
 
 .modal-btns {
@@ -314,6 +349,30 @@ button {
     background-color: #1565C0;
 }
 
+.secondary-btn {
+    background-color: #ECEFF1;
+    color: #37474F;
+    padding: 7px 10px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.secondary-btn:hover {
+    background-color: #CFD8DC;
+}
+
+.danger-btn {
+    background-color: #FDECEA;
+    color: #B42318;
+    padding: 7px 10px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.danger-btn:hover {
+    background-color: #FCDAD7;
+}
+
 .gpx-track-info {
     background: #f5f5f5;
     border-radius: 8px;
@@ -326,6 +385,101 @@ button {
 
 .gpx-track-info span {
     font-weight: 600;
+}
+
+.uploaded-gpx-panel {
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(120, 144, 156, 0.35);
+}
+
+.gpx-modal-panel .uploaded-gpx-list {
+    max-height: 280px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.uploaded-gpx-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #37474F;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.uploaded-gpx-empty {
+    font-size: 12px;
+    color: #607D8B;
+}
+
+.uploaded-gpx-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.uploaded-gpx-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 8px;
+    background: rgba(236, 239, 241, 0.9);
+}
+
+.uploaded-gpx-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+}
+
+.uploaded-gpx-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #263238;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.uploaded-gpx-date {
+    font-size: 11px;
+    color: #607D8B;
+}
+
+.uploaded-gpx-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.uploaded-gpx-actions button {
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .uploaded-gpx-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .uploaded-gpx-actions {
+        width: 100%;
+    }
+
+    .uploaded-gpx-actions .secondary-btn,
+    .uploaded-gpx-actions .danger-btn {
+        flex: 1;
+    }
+
+    .header-buttons {
+        gap: 6px;
+    }
 }
 
 .gpx-km-label {
