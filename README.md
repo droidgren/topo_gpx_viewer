@@ -38,6 +38,7 @@ Also check out **Elevation Finder**, a tool for checking ground elevation on the
 - Install dependencies with `pip install -r requirements.txt`
 - Start the backend with `uvicorn main:app --host 0.0.0.0 --port 8000`
 - Open `http://localhost:8000/`
+- In `app/script.js`, set `BACKEND_AVAILABLE` to `true` when serving the frontend with the FastAPI backend
 
 ### Docker Run
 - Build the image with `docker build -t topo-gpx-viewer .`
@@ -49,6 +50,11 @@ Also check out **Elevation Finder**, a tool for checking ground elevation on the
 - `GPX_UPLOAD_DIR` — optional override for the GPX file storage directory
 - `GPX_INDEX_PATH` — optional override for the metadata index JSON file
 - `GPX_MAX_UPLOAD_BYTES` — maximum upload size in bytes. Default: `10485760`
+
+### Frontend Backend Toggle
+- `app/script.js` contains a `BACKEND_AVAILABLE` flag for deployments without the FastAPI backend
+- Set `BACKEND_AVAILABLE = false` for static/local-only deployments: GPX files open directly in the browser and Share copies only the current map view
+- Set `BACKEND_AVAILABLE = true` for backend-backed deployments: local GPX files are uploaded, listed, reopenable, and shareable with `?gpx=<id>` links
 
 ## Repo Layout
 
@@ -73,7 +79,8 @@ Also check out **Elevation Finder**, a tool for checking ground elevation on the
 ### Share Map View
 - Click **🔗 Share Map View** to copy a URL with your current map state
 - Map-only shared links use hash format: `#map=zoom/lat/lng/layer`
-- If a backend-stored GPX route is active, the shared link also includes `?gpx=<id>`
+- If `BACKEND_AVAILABLE` is `true` and a backend-stored GPX route is active, the shared link also includes `?gpx=<id>`
+- If `BACKEND_AVAILABLE` is `false`, locally opened GPX routes stay local and the shared link remains map-only
 - Opening a shared link restores the same map zoom, center, layer, and shared GPX route
 
 ### Self-Hosted GPX Uploads

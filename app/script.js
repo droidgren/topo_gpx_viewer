@@ -29,6 +29,12 @@ const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const SATELLITE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 const WORKER_URL = "https://lm.clackspark.workers.dev";
 const API_BASE = '/api';
+// Toggle this when deploying with or without the FastAPI backend.
+const BACKEND_AVAILABLE = false;
+
+function isBackendEnabled() {
+    return BACKEND_AVAILABLE;
+}
 
 // ==========================================
 // 2. DOM ELEMENTS
@@ -211,8 +217,16 @@ function updateLanguage() {
         if (document.getElementById('section-routes-title')) document.getElementById('section-routes-title').textContent = t.section_routes_title;
         if (document.getElementById('gpx-btn')) document.getElementById('gpx-btn').textContent = t.btn_gpx;
         if (document.getElementById('gpx-modal-title')) document.getElementById('gpx-modal-title').textContent = t.modal_gpx_title || t.btn_gpx;
-        if (document.getElementById('gpx-modal-desc')) document.getElementById('gpx-modal-desc').textContent = t.modal_gpx_desc || '';
-        if (document.getElementById('gpx-upload-btn')) document.getElementById('gpx-upload-btn').textContent = t.btn_upload_gpx || 'Upload';
+        if (document.getElementById('gpx-modal-desc')) {
+            document.getElementById('gpx-modal-desc').textContent = isBackendEnabled()
+                ? (t.modal_gpx_desc || '')
+                : (t.modal_gpx_desc_local || t.modal_gpx_desc || '');
+        }
+        if (document.getElementById('gpx-upload-btn')) {
+            document.getElementById('gpx-upload-btn').textContent = isBackendEnabled()
+                ? (t.btn_upload_gpx || 'Upload')
+                : (t.btn_open_local_gpx || t.btn_upload_gpx || 'Open GPX file');
+        }
         if (document.getElementById('gpx-modal-close')) document.getElementById('gpx-modal-close').textContent = t.btn_close;
         if (document.getElementById('gpx-clear-btn')) document.getElementById('gpx-clear-btn').textContent = t.btn_gpx_clear;
         const shareMapBtn = document.getElementById('share-map-btn');
@@ -221,7 +235,11 @@ function updateLanguage() {
             shareMapBtn.title = shareLabel;
             shareMapBtn.setAttribute('aria-label', shareLabel);
         }
-        if (document.getElementById('uploaded-gpx-title')) document.getElementById('uploaded-gpx-title').textContent = t.uploaded_gpx_title;
+        if (document.getElementById('uploaded-gpx-title')) {
+            document.getElementById('uploaded-gpx-title').textContent = isBackendEnabled()
+                ? t.uploaded_gpx_title
+                : (t.uploaded_gpx_title_local || t.uploaded_gpx_title);
+        }
         if (document.getElementById('lbl-track-color')) document.getElementById('lbl-track-color').textContent = t.lbl_track_color;
         if (document.getElementById('lbl-track-width')) document.getElementById('lbl-track-width').textContent = t.lbl_track_width;
         if (document.getElementById('lbl-km-labels')) document.getElementById('lbl-km-labels').textContent = t.lbl_km_labels;
@@ -379,7 +397,13 @@ function showGpxModal() {
     const modal = document.getElementById('gpx-modal');
     if (!modal) return;
     modal.style.display = 'flex';
-    refreshUploadedFiles();
+    if (isBackendEnabled()) {
+        refreshUploadedFiles();
+    } else {
+        uploadedGpxFiles = [];
+        uploadedGpxListState = 'disabled';
+        renderUploadedFiles();
+    }
 }
 
 function closeGpxModal() {
@@ -494,7 +518,7 @@ function getCurrentMapHash() {
 }
 
 function getCurrentShareLink() {
-    if (currentSharedGpxId) {
+    if (isBackendEnabled() && currentSharedGpxId) {
         const params = new URLSearchParams();
         params.set('gpx', currentSharedGpxId);
         return location.origin + location.pathname + '?' + params.toString();
@@ -561,7 +585,7 @@ async function copyTextToClipboard(text, successMessage, errorMessage) {
 window.generateShareLink = function () {
     const t = translations[currentLang];
     const link = getCurrentShareLink();
-    const successMessage = currentSharedGpxId
+    const successMessage = isBackendEnabled() && currentSharedGpxId
         ? (t.status_gpx_share_copied || t.status_link_copied || 'Link copied to clipboard.')
         : (t.status_link_copied || 'Link copied to clipboard.');
     copyTextToClipboard(
@@ -573,6 +597,13 @@ window.generateShareLink = function () {
 
 window.copyUploadedGpxLink = function (gpxId) {
     const t = translations[currentLang];
+    if (!isBackendEnabled()) {
+        return copyTextToClipboard(
+            getCurrentShareLink(),
+            t.status_link_copied || 'Link copied to clipboard.',
+            t.status_clipboard_error || 'Could not copy link.'
+        );
+    }
     const params = new URLSearchParams();
     params.set('gpx', gpxId);
     const link = location.origin + location.pathname + '?' + params.toString();
@@ -586,6 +617,10 @@ window.copyUploadedGpxLink = function (gpxId) {
 window.deleteUploadedGpx = async function (gpxId) {
     const t = translations[currentLang];
     if (!gpxId) return;
+    if (!isBackendEnabled()) {
+        statusDiv.textContent = t.status_backend_disabled || 'Backend sharing is disabled in this build.';
+        return;
+    }
 
     const fileEntry = uploadedGpxFiles.find(file => file.id === gpxId);
     const filename = fileEntry && fileEntry.filename ? fileEntry.filename : 'GPX file';
@@ -1017,12 +1052,12 @@ function fitGpxBounds(allSegments, waypoints) {
 }
 
 function setActiveGpxSource(source) {
-    currentSharedGpxId = source && source.id ? source.id : null;
+    currentSharedGpxId = isBackendEnabled() && source && source.id ? source.id : null;
     currentGpxFilename = source && source.filename ? source.filename : null;
-    currentGpxShareUrl = source && source.shareUrl ? source.shareUrl : null;
+    currentGpxShareUrl = isBackendEnabled() && source && source.shareUrl ? source.shareUrl : null;
 
     const params = new URLSearchParams(location.search);
-    if (currentSharedGpxId) {
+    if (isBackendEnabled() && currentSharedGpxId) {
         params.set('gpx', currentSharedGpxId);
     } else {
         params.delete('gpx');
@@ -1080,6 +1115,12 @@ function renderUploadedFiles() {
 
     const t = translations[currentLang];
     listEl.innerHTML = '';
+    if (!isBackendEnabled() || uploadedGpxListState === 'disabled') {
+        emptyEl.style.display = '';
+        emptyEl.textContent = t.uploaded_gpx_unavailable || 'Backend upload and sharing are disabled in this build.';
+        return;
+    }
+
     if (uploadedGpxListState === 'loading') {
         emptyEl.style.display = '';
         emptyEl.textContent = t.uploaded_gpx_loading || 'Loading uploaded GPX files...';
@@ -1152,6 +1193,13 @@ function renderUploadedFiles() {
 }
 
 async function refreshUploadedFiles() {
+    if (!isBackendEnabled()) {
+        uploadedGpxFiles = [];
+        uploadedGpxListState = 'disabled';
+        renderUploadedFiles();
+        return;
+    }
+
     uploadedGpxListState = 'loading';
     renderUploadedFiles();
     try {
@@ -1177,6 +1225,10 @@ async function refreshUploadedFiles() {
 async function loadSharedGpxById(gpxId, options = {}) {
     const t = translations[currentLang];
     if (!gpxId) return;
+    if (!isBackendEnabled()) {
+        statusDiv.textContent = t.status_shared_gpx_backend_disabled || t.status_backend_disabled || 'Backend sharing is disabled in this build.';
+        return false;
+    }
     statusDiv.textContent = t.status_loading_shared_gpx || t.status_loading || 'Loading data...';
     try {
         const response = await fetch(API_BASE + '/files/' + encodeURIComponent(gpxId) + '/raw', {
@@ -1208,6 +1260,10 @@ async function loadSharedGpxById(gpxId, options = {}) {
 }
 
 async function uploadGpxFile(file) {
+    if (!isBackendEnabled()) {
+        return null;
+    }
+
     const t = translations[currentLang];
     const formData = new FormData();
     formData.append('file', file);
@@ -1237,22 +1293,26 @@ async function handleLocalFileSelection(file) {
         const gpxText = await file.text();
         const parsedGpx = parseGpxText(gpxText);
         let uploadResult = null;
-        try {
-            uploadResult = await uploadGpxFile(file);
-        } catch (uploadErr) {
-            uploadResult = null;
+        if (isBackendEnabled()) {
+            try {
+                uploadResult = await uploadGpxFile(file);
+            } catch (uploadErr) {
+                uploadResult = null;
+            }
         }
         applyParsedGpxData(parsedGpx, {
             source: uploadResult,
             statusMessage: uploadResult
                 ? (t.status_gpx_uploaded || t.status_gpx_loaded || 'GPX route loaded ({n} points).')
-                : (t.status_gpx_loaded_local || t.status_gpx_loaded || 'GPX route loaded ({n} points).')
+                : (isBackendEnabled()
+                    ? (t.status_gpx_loaded_local || t.status_gpx_loaded || 'GPX route loaded ({n} points).')
+                    : (t.status_gpx_loaded_local_only || t.status_gpx_loaded || 'GPX route loaded ({n} points).'))
         });
         if (uploadResult) {
             await refreshUploadedFiles();
         }
     } catch (err) {
-        statusDiv.textContent = t.status_upload_gpx_error || t.status_gpx_error || 'Failed to load GPX file.';
+        statusDiv.textContent = t.status_gpx_error || 'Failed to load GPX file.';
     }
 }
 
@@ -2119,7 +2179,16 @@ async function initializeApp() {
     const sharedGpxId = params.get('gpx');
     const hasMapHash = location.hash.startsWith('#map=');
     if (sharedGpxId) {
-        await loadSharedGpxById(sharedGpxId, { skipFitBounds: hasMapHash });
+        if (isBackendEnabled()) {
+            await loadSharedGpxById(sharedGpxId, { skipFitBounds: hasMapHash });
+        } else {
+            params.delete('gpx');
+            const queryString = params.toString();
+            history.replaceState(null, '', location.pathname + (queryString ? '?' + queryString : '') + location.hash);
+            statusDiv.textContent = translations[currentLang].status_shared_gpx_backend_disabled
+                || translations[currentLang].status_backend_disabled
+                || 'Backend sharing is disabled in this build.';
+        }
     }
     if (hasMapHash) {
         applyMapHashParams();
