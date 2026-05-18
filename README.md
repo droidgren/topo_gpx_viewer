@@ -94,6 +94,11 @@ Also check out **Elevation Finder**, a tool for checking ground elevation on the
 - Click the GPS button to center on your current location
 
 ## Changelog
+### v0.5
+- Added a `BACKEND_AVAILABLE` frontend toggle for deployments without the FastAPI backend
+- Local GPX files now open directly in the browser without attempting backend upload, listing, delete, or shared-file fetch calls when backend mode is off
+- Share behavior now falls back cleanly to map-only links in local-only mode
+- Updated the GPX modal and status copy to explain when backend-backed upload history and shared GPX links are unavailable
 
 ### v0.3
 - Added a **Share Map View** button to copy map-state links
