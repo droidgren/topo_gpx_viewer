@@ -28,7 +28,7 @@ Also check out **Elevation Finder**, a tool for checking ground elevation on the
 
 ## Getting Started
 
-1. Open the [live demo](https://droidgren.github.io/topo_gpx_viewer/app/index.html)) or serve the files locally
+1. Open the ([live demo](https://droidgren.github.io/topo_gpx_viewer/app/index.html)) or serve the files locally
 2. Click **📂 Load GPX track** to load a GPX file
 3. Explore the track with distance labels, slope coloring, and elevation stats
 
