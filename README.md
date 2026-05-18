@@ -94,6 +94,12 @@ Also check out **Elevation Finder**, a tool for checking ground elevation on the
 - Click the GPS button to center on your current location
 
 ## Changelog
+
+### v0.5.1
+- Updated "Tips" spotlight modal with keyboard shortcut references and profile interactions
+- In the elevation profile, use ← → arrow keys to step along the track. Press Escape to clear
+- The elevation profile supports scrolling to zoom in into the profile
+
 ### v0.5
 - Added a `BACKEND_AVAILABLE` frontend toggle for deployments without the FastAPI backend
 - Local GPX files now open directly in the browser without attempting backend upload, listing, delete, or shared-file fetch calls when backend mode is off

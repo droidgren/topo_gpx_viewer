@@ -1,7 +1,7 @@
 // ==========================================
 // 1. CONFIGURATION & CONSTANTS
 // ==========================================
-const APP_VERSION = "0.3";
+const APP_VERSION = "0.5.1";
 
 // Base64 flags
 const FLAG_SE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxMCI+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjEwIiBmaWxsPSIjMDA2YWE3Ii8+PHJlY3QgeD0iNSIgd2lkdGg9IjIiIGhlaWdodD0iMTAiIGZpbGw9IiNmZWNjMDAiLz48cmVjdCB5PSI0IiB3aWR0aD0iMTYiIGhlaWdodD0iMiIgZmlsbD0iI2ZlY2MwMCIvPjwvc3ZnPg==";
@@ -1607,6 +1607,8 @@ let elevationProfileData = null; // [{dist, ele, lat, lon}, ...]
 let elevationProfileMinimized = true;
 let elevationProfileMarker = null;
 let elevationProfileRedrawFrame = null;
+let elevationViewStart = null;
+let elevationViewEnd = null;
 
 function scheduleElevationProfileRedraw() {
     if (elevationProfileRedrawFrame !== null) {
@@ -1674,6 +1676,9 @@ function showElevationProfile() {
     elevationProfileData = buildElevationProfileData(gpxTrackData.segments);
     if (elevationProfileData.length < 2) return;
 
+    elevationViewStart = 0;
+    elevationViewEnd = elevationProfileData[elevationProfileData.length - 1].dist;
+
     const container = document.getElementById('elevation-profile');
     container.style.display = '';
     if (elevationProfileMinimized) {
@@ -1695,6 +1700,8 @@ function hideElevationProfile() {
     const container = document.getElementById('elevation-profile');
     container.style.display = 'none';
     elevationProfileData = null;
+    elevationViewStart = null;
+    elevationViewEnd = null;
     removeElevationMarker();
     adjustMapControlsForElevation();
 }
@@ -1744,18 +1751,29 @@ function drawElevationProfile() {
 
     const data = elevationProfileData;
     const totalDist = data[data.length - 1].dist;
+    
+    // Determine view bounds
+    const vStart = elevationViewStart !== null ? elevationViewStart : 0;
+    const vEnd = elevationViewEnd !== null ? elevationViewEnd : totalDist;
+    const vRange = vEnd - vStart || 1;
+
     let minEle = Infinity, maxEle = -Infinity;
     for (const p of data) {
-        if (p.ele < minEle) minEle = p.ele;
-        if (p.ele > maxEle) maxEle = p.ele;
+        if (p.dist >= vStart && p.dist <= vEnd) {
+            if (p.ele < minEle) minEle = p.ele;
+            if (p.ele > maxEle) maxEle = p.ele;
+        }
     }
+    // Fallback if no points inside range
+    if (minEle === Infinity) { minEle = 0; maxEle = 100; }
+
     // Add some padding to elevation range
     const eleRange = maxEle - minEle || 1;
     const elePad = eleRange * 0.1;
     const eleMin = minEle - elePad;
     const eleMax = maxEle + elePad;
 
-    const xScale = (d) => PAD_LEFT + (d / totalDist) * plotW;
+    const xScale = (d) => PAD_LEFT + ((d - vStart) / vRange) * plotW;
     const yScale = (e) => PAD_TOP + plotH - ((e - eleMin) / (eleMax - eleMin)) * plotH;
 
     // Grid lines - Y axis (elevation)
@@ -1788,23 +1806,37 @@ function drawElevationProfile() {
     const unit = getDistanceUnit();
     const unitMeters = unit === 'mi' ? 1609.344 : 1000;
     const unitLabel = unit === 'mi' ? 'mi' : 'km';
-    const totalUnits = totalDist / unitMeters;
-    const niceDistSteps = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+    const viewUnitsStart = vStart / unitMeters;
+    const viewUnitsEnd = vEnd / unitMeters;
+    const viewUnitsTotal = vRange / unitMeters;
+    const niceDistSteps = [0.01, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
     const targetXLabels = Math.max(3, Math.floor(plotW / 70));
     let distStep = niceDistSteps[niceDistSteps.length - 1];
     for (const s of niceDistSteps) {
-        if (totalUnits / s <= targetXLabels + 1) { distStep = s; break; }
+        if (viewUnitsTotal / s <= targetXLabels + 1) { distStep = s; break; }
     }
-    for (let d = 0; d <= totalUnits; d += distStep) {
+    const distStart = Math.ceil(viewUnitsStart / distStep) * distStep;
+    for (let d = distStart; d <= viewUnitsEnd; d += distStep) {
         const x = xScale(d * unitMeters);
         if (x < PAD_LEFT || x > PAD_LEFT + plotW) continue;
         ctx.beginPath();
         ctx.moveTo(x, PAD_TOP);
         ctx.lineTo(x, PAD_TOP + plotH);
         ctx.stroke();
-        const label = Number.isInteger(d) ? d : d.toFixed(1);
+        
+        let label;
+        if (distStep >= 1) label = Math.round(d);
+        else if (distStep >= 0.1) label = d.toFixed(1);
+        else label = d.toFixed(2);
+        
         ctx.fillText(label + ' ' + unitLabel, x, PAD_TOP + plotH + 4);
     }
+
+    // Clip the plotting area
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(PAD_LEFT, PAD_TOP, plotW, plotH);
+    ctx.clip();
 
     // Filled area
     ctx.beginPath();
@@ -1832,13 +1864,15 @@ function drawElevationProfile() {
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
+    ctx.restore(); // Remove clipping so border draws properly
+
     // Border around plot
     ctx.strokeStyle = '#ccc';
     ctx.lineWidth = 1;
     ctx.strokeRect(PAD_LEFT, PAD_TOP, plotW, plotH);
 
     // Store drawing params for hit-testing
-    canvas._epParams = { PAD_LEFT, PAD_RIGHT, PAD_TOP, PAD_BOTTOM, plotW, plotH, totalDist, eleMin, eleMax, W, H };
+    canvas._epParams = { PAD_LEFT, PAD_RIGHT, PAD_TOP, PAD_BOTTOM, plotW, plotH, totalDist, eleMin, eleMax, W, H, vStart, vEnd, vRange };
 }
 
 function getElevationPointAtX(canvasX) {
@@ -1847,7 +1881,7 @@ function getElevationPointAtX(canvasX) {
     const p = canvas._epParams;
     const frac = (canvasX - p.PAD_LEFT) / p.plotW;
     if (frac < 0 || frac > 1) return null;
-    const targetDist = frac * p.totalDist;
+    const targetDist = p.vStart + frac * p.vRange;
 
     // Binary search for closest point
     const data = elevationProfileData;
@@ -2084,6 +2118,72 @@ function removeElevationMarker() {
         }
         adjustMapControlsForElevation();
     });
+
+    canvas.addEventListener('wheel', (e) => {
+        if (!elevationProfileData || elevationProfileMinimized) return;
+        const p = canvas._epParams;
+        if (!p) return;
+        
+        e.preventDefault();
+
+        // Canvas coordinates
+        const rect = canvas.getBoundingClientRect();
+        const canvasX = e.clientX - rect.left;
+        
+        // Find cursor fraction over the plot area
+        let frac = (canvasX - p.PAD_LEFT) / p.plotW;
+        frac = Math.max(0, Math.min(1, frac)); // Bound the pivot
+        
+        const zoomPivotDist = p.vStart + frac * p.vRange;
+        
+        const zoomFactor = e.deltaY < 0 ? 0.8 : 1.25;
+        let newRange = p.vRange * zoomFactor;
+
+        // Prevent zooming too far in/out
+        const minDistanceSpan = p.totalDist * 0.01; // Max 100x zoom
+        if (newRange < minDistanceSpan) newRange = minDistanceSpan;
+        if (newRange > p.totalDist) newRange = p.totalDist;
+
+        let newStart = zoomPivotDist - (frac * newRange);
+        let newEnd = newStart + newRange;
+
+        // Clamp to file bounds
+        if (newStart < 0) {
+            newStart = 0;
+            newEnd = newRange;
+        }
+        if (newEnd > p.totalDist) {
+            newEnd = p.totalDist;
+            newStart = p.totalDist - newRange;
+            if (newStart < 0) newStart = 0;
+        }
+
+        elevationViewStart = newStart;
+        elevationViewEnd = newEnd;
+
+        drawElevationProfile();
+        
+        // Re-trigger hover effect at current mouse position after redrawing
+        const point = getElevationPointAtX(canvasX);
+        if (point) {
+            drawElevationCursor(canvasX, point);
+            updateElevationProfileInfo(point);
+            showElevationMarker(point.lat, point.lon);
+            if (getElevMapSync()) { // Removed syncMap parameter dependency for simple update
+                // Optional: map.panTo([point.lat, point.lon], { animate: false });
+            }
+        }
+    }, { passive: false });
+
+    // Expand on click if minimized
+    const container = document.getElementById('elevation-profile');
+    if (container) {
+        container.addEventListener('click', (e) => {
+            if (elevationProfileMinimized && !e.target.closest('.elevation-profile-toggle') && !e.target.closest('.elevation-profile-overlay')) {
+                toggleElevationProfile();
+            }
+        });
+    }
 
     const elevationProfileBody = document.getElementById('elevation-profile-body');
     if (elevationProfileBody && 'ResizeObserver' in window) {

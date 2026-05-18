@@ -50,7 +50,7 @@ const LANG_EN = {
     tutorial_share_title: "Share Map View",
     tutorial_share_text: "Use this button to copy a share link. If a backend-shared GPX route is loaded, the link includes that route. Otherwise, the link shares your current zoom, center, and map layer.",
     tutorial_tips_title: "💡 Tips",
-    tutorial_tips_text: "• Load a GPX file to see your route with distance labels and elevation stats.\n• Use slope coloring to visualize uphills and downhills.\n• Rotate the map by holding Ctrl and dragging, or use two-finger rotation on touch devices. Tap the compass icon to reset north.\n• In the elevation profile, use ← → arrow keys to step along the track (hold Shift for bigger steps). Press Escape to clear.",
+    tutorial_tips_text: "• Rotate the map by holding Ctrl and dragging, or use two-finger rotation on touch devices. Tap the compass icon to reset north.\n• In the elevation profile, use ← → arrow keys to step along the track (hold Shift for bigger steps). Press Escape to clear.\n• In the elevation profile, you can scroll to zoom into profile.\n• Use slope coloring to visualize uphills and downhills.",
     tutorial_btn_next: "Next",
     tutorial_btn_prev: "Back",
     tutorial_btn_finish: "Finish",

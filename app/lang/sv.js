@@ -50,7 +50,7 @@ const LANG_SV = {
     tutorial_share_title: "Dela kartvy",
     tutorial_share_text: "Använd den här knappen för att kopiera en delningslänk. Om ett GPX-spår från backend är laddat inkluderas det i länken. Annars delar länken aktuell zoom, centrum och kartlager.",
     tutorial_tips_title: "💡 Tips",
-    tutorial_tips_text: "• Ladda en GPX-fil för att se ditt spår med avståndsmarkeringar och höjdstatistik.\n• Använd lutningsfärgning för att visualisera uppförs- och nedförsbackar.\n• Rotera kartan genom att hålla Ctrl och dra, eller använd tvåfingerrotation på pekskärm. Tryck på kompassikonen för att återställa norr.\n• I höjdprofilen kan du använda ← → piltangenterna för att gå längs spåret (håll Shift för större steg). Tryck Escape för att avsluta.",
+    tutorial_tips_text: "• Rotera kartan genom att hålla Ctrl och dra, eller använd tvåfingerrotation på pekskärm. Tryck på kompassikonen för att återställa norr.\n• I höjdprofilen, använd ← → piltangenterna för att gå längs spåret (håll Shift för större steg). Tryck Escape för att avsluta.\n• I höjdprofilen kan du skrolla för att zooma in i profilen.\n• Använd lutningsfärgning för att visualisera uppförs- och nedförsbackar.",
     tutorial_btn_next: "Nästa",
     tutorial_btn_prev: "Tillbaka",
     tutorial_btn_finish: "Avsluta",
