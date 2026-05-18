@@ -1388,17 +1388,19 @@ let _tutorialOverlayClickHandler = null;
 const tutorialSteps = [
     { targetSelector: null, titleKey: 'tutorial_welcome_title', textKey: 'tutorial_welcome_text' },
     { targetSelector: '.circle-btn:not(.info-btn)', titleKey: 'tutorial_language_title', textKey: 'tutorial_language_text' },
+    { targetSelector: '#share-map-btn', titleKey: 'tutorial_share_title', textKey: 'tutorial_share_text' },
     { targetSelector: '.info-btn', titleKey: 'tutorial_info_title', textKey: 'tutorial_info_text' },
     { targetSelector: '.toggle-btn', titleKey: 'tutorial_minimize_title', textKey: 'tutorial_minimize_text' },
     { targetSelector: '#layerSelect', titleKey: 'tutorial_layers_title', textKey: 'tutorial_layers_text' },
     { targetSelector: '.search-group', titleKey: 'tutorial_search_title', textKey: 'tutorial_search_text' },
     { targetSelector: '#section-routes-title', targetSelectorEnd: '#gpx-btn', titleKey: 'tutorial_routes_title', textKey: 'tutorial_routes_text' },
-    { targetSelector: '#share-map-btn', titleKey: 'tutorial_share_title', textKey: 'tutorial_share_text' },
     { targetSelector: null, titleKey: 'tutorial_tips_title', textKey: 'tutorial_tips_text' }
 ];
+const tutorialExpandStepIndex = tutorialSteps.findIndex(step => step.titleKey === 'tutorial_layers_title');
+const tutorialCollapseAgainStepIndex = tutorialSteps.findIndex(step => step.titleKey === 'tutorial_tips_title');
 
 function startTutorial() {
-    if (controls && controls.classList.contains('minimized')) {
+    if (controls && !controls.classList.contains('minimized')) {
         toggleControls();
     }
     tutorialStep = 0;
@@ -1427,6 +1429,16 @@ function renderTutorialStep() {
     const prevBtn = document.getElementById('tutorial-prev');
     const nextBtn = document.getElementById('tutorial-next');
     const progressEl = document.getElementById('tutorial-progress');
+
+    if (controls && tutorialExpandStepIndex !== -1 && tutorialCollapseAgainStepIndex !== -1) {
+        const shouldBeExpanded = tutorialStep >= tutorialExpandStepIndex && tutorialStep < tutorialCollapseAgainStepIndex;
+        const isMinimized = controls.classList.contains('minimized');
+        if (shouldBeExpanded && isMinimized) {
+            toggleControls();
+        } else if (!shouldBeExpanded && !isMinimized) {
+            toggleControls();
+        }
+    }
 
     titleEl.textContent = t[step.titleKey] || '';
     textEl.textContent = t[step.textKey] || '';
@@ -1575,6 +1587,13 @@ function getElevationBarHeight() {
     if (!elevationProfileData) return 0;
     const container = document.getElementById('elevation-profile');
     if (!container || container.style.display === 'none') return 0;
+
+    const body = document.getElementById('elevation-profile-body');
+    const rect = body ? body.getBoundingClientRect() : container.getBoundingClientRect();
+    if (rect.height > 0) {
+        return rect.height;
+    }
+
     if (elevationProfileMinimized) return 26;
     return window.innerWidth >= 600 ? 150 : 130;
 }
@@ -1582,7 +1601,11 @@ function getElevationBarHeight() {
 function adjustMapControlsForElevation() {
     const h = getElevationBarHeight();
     const bottomRight = document.querySelector('.leaflet-bottom.leaflet-right');
-    if (bottomRight) bottomRight.style.bottom = h + 'px';
+    if (bottomRight) {
+        bottomRight.style.bottom = h > 0
+            ? `calc(${Math.ceil(h)}px + env(safe-area-inset-bottom, 0px))`
+            : '';
+    }
 }
 
 function showElevationProfile() {
@@ -1634,12 +1657,21 @@ function drawElevationProfile() {
     if (!canvas || !elevationProfileData || elevationProfileData.length < 2) return;
 
     const body = document.getElementById('elevation-profile-body');
+    if (!body) return;
     const rect = body.getBoundingClientRect();
+    if (rect.width <= 80 || rect.height <= 40) {
+        if (!elevationProfileMinimized) {
+            scheduleElevationProfileRedraw();
+        }
+        return;
+    }
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
     const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const W = rect.width;
     const H = rect.height;
@@ -1665,9 +1697,6 @@ function drawElevationProfile() {
 
     const xScale = (d) => PAD_LEFT + (d / totalDist) * plotW;
     const yScale = (e) => PAD_TOP + plotH - ((e - eleMin) / (eleMax - eleMin)) * plotH;
-
-    // Clear
-    ctx.clearRect(0, 0, W, H);
 
     // Grid lines - Y axis (elevation)
     ctx.strokeStyle = '#e0e0e0';
@@ -1995,6 +2024,30 @@ function removeElevationMarker() {
         }
         adjustMapControlsForElevation();
     });
+
+    const elevationProfileBody = document.getElementById('elevation-profile-body');
+    if (elevationProfileBody && 'ResizeObserver' in window) {
+        let lastBodyWidth = 0;
+        let lastBodyHeight = 0;
+        const resizeObserver = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (!entry || !elevationProfileData) return;
+
+            const width = entry.contentRect.width;
+            const height = entry.contentRect.height;
+            if (Math.abs(width - lastBodyWidth) < 0.5 && Math.abs(height - lastBodyHeight) < 0.5) {
+                return;
+            }
+
+            lastBodyWidth = width;
+            lastBodyHeight = height;
+            adjustMapControlsForElevation();
+            if (!elevationProfileMinimized) {
+                scheduleElevationProfileRedraw();
+            }
+        });
+        resizeObserver.observe(elevationProfileBody);
+    }
 })();
 
 // ==========================================
